@@ -1,0 +1,13 @@
+node_modules/
+dist/
+out/
+*.vsix
+.vscode-test/
+playwright-report/
+test-results/
+
+# forge — 휘발 상태는 무시하고 영구 문서만 추적
+.forge/*
+!.forge/CONTEXT.md
+!.forge/adr/
+!.forge/retro/
