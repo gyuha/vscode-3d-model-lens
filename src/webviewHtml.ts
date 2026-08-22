@@ -19,6 +19,8 @@ export interface WebviewHtmlParams {
   pluginExtension: SupportedExtension;
   /** 배경 모드. `theme` 은 VS Code 편집기 배경색을 따른다 */
   background: BackgroundMode;
+  /** 그리드 표시 여부. 전역 설정 `modelLens.grid` 가 진실의 출처다 */
+  grid: boolean;
   /** 단위 초기값. `auto` 는 포맷에서 유추한다 */
   unitSetting: UnitSetting;
   /** 표시 소수점 자릿수 */
@@ -240,9 +242,7 @@ ${unitOptions}
 
     <hr />
 
-    <label><input type="checkbox" id="toggle-grid" checked /> Grid</label>
-    <label><input type="checkbox" id="toggle-axes" checked /> Axes</label>
-    <label><input type="checkbox" id="toggle-wireframe" /> Wireframe</label>
+    <label><input type="checkbox" id="toggle-grid"${params.grid ? ' checked' : ''} /> Grid</label>
 
     <div id="background-row">
       <label for="background-select">Background</label>

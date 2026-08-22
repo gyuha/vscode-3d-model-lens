@@ -63,7 +63,7 @@ Turn on measure mode with the measure icon in the editor title bar (or `3D Model
 from the command palette), then **pick two points** on the surface to create one distance. You can still
 **drag to orbit** while in measure mode — movement past a threshold does not place a measurement point.
 
-- **Vertex snap** (on by default): snaps to the nearest of the three vertices of the triangle you clicked. This is what you need to measure corner and edge dimensions accurately. Turn on wireframe to see where the vertices are.
+- **Vertex snap** (on by default): snaps to the nearest of the three vertices of the triangle you clicked. This is what you need to measure corner and edge dimensions accurately. To see where the vertices are, open the Babylon Inspector and turn on `Wireframe` on the model's material — note that the Inspector renders continuously, so the idle render gate stays off while it is open.
 - Measurement lines and markers are drawn **through the model** so they stay visible. Marker size scales with model size, so they are visible on both very small and very large models.
 - Measurements accumulate in a list. Click an entry to select it, `✕` to remove one, `Clear all` to remove them all.
 - Changing the unit also refreshes the labels of measurements you already made.
@@ -88,6 +88,7 @@ the Inspector says so (this also removed roughly 10 MB and several external CDN 
 | Setting | Default | Description |
 |---|---|---|
 | `modelLens.background` | `theme` | Viewer background mode. `theme` follows the VS Code editor background color; `light` (`#ffffff`) and `dark` (`#1f1f1f`) pin it regardless of the theme. Changing it from the viewer panel saves it here. |
+| `modelLens.grid` | `true` | Show the ground grid in the viewer. Toggling it from the viewer panel saves it here and applies to every open viewer immediately. |
 | `modelLens.inspectorOnStart` | `false` | Start with the Inspector open when a model is opened. |
 | `modelLens.unit` | `auto` | **Initial** unit for dimensions and measurements. `auto` means `m` for glTF/GLB and no label for STL. Changeable per file from the viewer panel, and that choice is remembered. |
 | `modelLens.decimals` | `3` | Number of decimal places displayed (0–10). |

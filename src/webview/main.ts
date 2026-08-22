@@ -48,9 +48,6 @@ const restored = restoreViewerState(host?.getState());
 
 if (restored) {
   // 토글은 뷰어를 만들기 전에 DOM 에 반영해 둔다 — wirePanel 이 현재 checked 상태를 적용한다.
-  setChecked('toggle-grid', restored.toggles.grid);
-  setChecked('toggle-axes', restored.toggles.axes);
-  setChecked('toggle-wireframe', restored.toggles.wireframe);
   setChecked('toggle-snap', restored.toggles.snap);
 }
 
@@ -132,13 +129,10 @@ function wirePanel(chrome: Chrome, viewer: Viewer): void {
     chrome.setGridVisible(on);
     viewer.markDirty();
   });
-  bindCheckbox('toggle-axes', (on) => {
-    chrome.setAxesVisible(on);
-    viewer.markDirty();
-  });
-  bindCheckbox('toggle-wireframe', (on) => {
-    chrome.setWireframe(on);
-    viewer.markDirty();
+  // 호스트 통보는 `bindCheckbox` 의 초기 apply 에 섞지 않는다 — 그러면 뷰어를 열 때마다
+  // `gridChanged` 가 나가 전역 설정을 다시 쓴다. 사용자의 조작(`change`)에만 반응해야 한다.
+  requireElement<HTMLInputElement>('toggle-grid').addEventListener('change', (event) => {
+    post({ type: 'gridChanged', grid: (event.target as HTMLInputElement).checked });
   });
 
   // Inspector 는 꺼진 채로 시작하므로 `bindCheckbox` 의 초기 apply 를 쓰지 않는다.
@@ -211,9 +205,6 @@ function wireStatePersistence(viewer: Viewer): void {
       ? { playing: viewer.animations.isPlaying, selection: viewer.animations.selection }
       : null,
     toggles: {
-      grid: isChecked('toggle-grid'),
-      axes: isChecked('toggle-axes'),
-      wireframe: isChecked('toggle-wireframe'),
       snap: isChecked('toggle-snap'),
     },
   });
@@ -398,6 +389,14 @@ function wireAnimationPanel(viewer: Viewer): void {
 function wireHostMessages(viewer: Viewer): void {
   window.addEventListener('message', (event: MessageEvent<HostToWebview>) => {
     const message = event.data;
+    if (message?.type === 'setGrid') {
+      // 그리드는 배경(CSS)과 달리 **씬**을 바꾼다 — 유휴였다면 아무도 다시 그리지 않으므로
+      // markDirty 가 없으면 나란히 열린 다른 탭의 화면이 얼어붙은 채 남는다.
+      viewer.chrome.setGridVisible(message.grid);
+      setChecked('toggle-grid', message.grid);
+      viewer.markDirty();
+      return;
+    }
     if (message?.type === 'setBackground') {
       applyBackground(message.background);
       requireElement<HTMLSelectElement>('background-select').value = message.background;

@@ -7,7 +7,9 @@ export type HostToWebview =
   | { type: 'setInspector'; visible: boolean }
   | { type: 'setMeasureMode'; active: boolean }
   /** 설정이 바뀌었다 — 열려 있는 모든 뷰어에 전파된다. */
-  | { type: 'setBackground'; background: BackgroundMode };
+  | { type: 'setBackground'; background: BackgroundMode }
+  /** 그리드 설정이 바뀌었다 — 열려 있는 모든 뷰어에 전파된다. */
+  | { type: 'setGrid'; grid: boolean };
 
 export type WebviewToHost =
   | { type: 'ready' }
@@ -17,4 +19,6 @@ export type WebviewToHost =
   /** 사용자가 뷰어 패널 드롭다운에서 단위를 바꿨다 — 호스트가 파일별로 기억한다. */
   | { type: 'unitChanged'; unit: UnitSetting }
   /** 사용자가 뷰어 패널 드롭다운에서 배경을 바꿨다 — 호스트가 전역 설정에 저장한다. */
-  | { type: 'backgroundChanged'; background: BackgroundMode };
+  | { type: 'backgroundChanged'; background: BackgroundMode }
+  /** 사용자가 뷰어 패널에서 그리드 표시를 토글했다 — 호스트가 전역 설정에 저장한다. */
+  | { type: 'gridChanged'; grid: boolean };

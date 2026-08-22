@@ -318,10 +318,10 @@ test.describe('유휴 렌더 중단', () => {
     expect(await waitForIdle(page)).toBe(true);
     const idleCount = await renderCount(page);
 
-    await page.locator('#toggle-wireframe').click();
+    await page.locator('#toggle-grid').click();
     await page.waitForTimeout(300);
 
-    expect(await renderCount(page), '와이어프레임을 켰는데 화면이 갱신되지 않았다').toBeGreaterThan(
+    expect(await renderCount(page), '그리드를 껐는데 화면이 갱신되지 않았다').toBeGreaterThan(
       idleCount,
     );
   });
@@ -412,7 +412,9 @@ test.describe('탭 전환 시 상태 보존', () => {
     expect(await page.locator('#measure-list .row .pick').allTextContents()).toEqual(beforeLabels);
     await expect(page.locator('.measure-label')).toHaveCount(2);
     await expect(page.locator('#root')).toHaveAttribute('data-measure', 'on');
-    await expect(page.locator('#toggle-grid')).not.toBeChecked();
+    // 그리드는 세션 상태가 아니라 전역 설정 `modelLens.grid` 가 소유한다 — 그래서 reload 하면
+    // 조작 이전이 아니라 **설정 값**으로 돌아온다. 정점 스냅은 여전히 세션 상태다.
+    await expect(page.locator('#toggle-grid')).toBeChecked();
     await expect(page.locator('#toggle-snap')).not.toBeChecked();
 
     // 카메라가 같은 자리로 돌아왔는지 — 같은 월드 좌표가 같은 화면 좌표로 투영된다
@@ -654,5 +656,45 @@ test.describe('배경 드롭다운', () => {
     expect(
       await page.evaluate(() => getComputedStyle(document.body).backgroundColor),
     ).toBe('rgb(255, 255, 255)');
+  });
+});
+
+test.describe('그리드 설정', () => {
+  test('설정이 꺼져 있으면 체크박스도 꺼진 채 시작한다 — 초기값의 출처가 전역 설정이다', async ({
+    page,
+  }) => {
+    await page.goto('/?fixture=cube.glb&grid=false');
+    expect(await waitForViewer(page)).toBe('ready');
+
+    await expect(page.locator('#toggle-grid')).not.toBeChecked();
+  });
+
+  test('체크박스를 끄면 호스트에 알린다 — 호스트가 전역 설정에 저장한다', async ({ page }) => {
+    await page.goto('/?fixture=cube.glb');
+    expect(await waitForViewer(page)).toBe('ready');
+    await expect(page.locator('#toggle-grid')).toBeChecked();
+    const messages = await collectHostMessages(page);
+
+    await page.locator('#toggle-grid').click();
+
+    expect(await messages()).toContainEqual({ type: 'gridChanged', grid: false });
+  });
+
+  test('호스트가 설정 변경을 알리면 체크박스가 따라오고 유휴였어도 다시 그린다 — 나란히 열린 다른 탭이 이 경로로 갱신된다', async ({
+    page,
+  }) => {
+    await page.goto('/?fixture=cube.glb');
+    expect(await waitForViewer(page)).toBe('ready');
+    expect(await waitForIdle(page), '유휴로 들어가지 않았다').toBe(true);
+    const idleCount = await renderCount(page);
+
+    await sendHostMessage(page, { type: 'setGrid', grid: false });
+
+    await expect(page.locator('#toggle-grid')).not.toBeChecked();
+    await page.waitForTimeout(300);
+    expect(
+      await renderCount(page),
+      '호스트가 그리드를 껐는데 화면이 갱신되지 않았다 — markDirty 누락',
+    ).toBeGreaterThan(idleCount);
   });
 });

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { isBackgroundMode, type BackgroundMode } from './background';
+import { readGridSetting } from './grid';
 import { pluginExtensionFor } from './formats';
 import type { HostToWebview, WebviewToHost } from './messages';
 import { computeLocalResourceRootPaths } from './resourceRoots';
@@ -28,12 +29,18 @@ export class ModelLensViewerProvider implements vscode.CustomReadonlyEditorProvi
     // 고장처럼 보인다. 설정 파일을 손으로 고친 경우도 같은 경로로 따라온다.
     context.subscriptions.push(
       vscode.workspace.onDidChangeConfiguration((event) => {
-        if (!event.affectsConfiguration('modelLens.background')) {
-          return;
+        const settings = vscode.workspace.getConfiguration('modelLens');
+        if (event.affectsConfiguration('modelLens.background')) {
+          const background = readBackgroundMode(settings);
+          for (const session of this.sessions) {
+            void this.send(session, { type: 'setBackground', background });
+          }
         }
-        const background = readBackgroundMode(vscode.workspace.getConfiguration('modelLens'));
-        for (const session of this.sessions) {
-          void this.send(session, { type: 'setBackground', background });
+        if (event.affectsConfiguration('modelLens.grid')) {
+          const grid = readGridSetting(settings.get<unknown>('grid'));
+          for (const session of this.sessions) {
+            void this.send(session, { type: 'setGrid', grid });
+          }
         }
       }),
     );
@@ -92,6 +99,10 @@ export class ModelLensViewerProvider implements vscode.CustomReadonlyEditorProvi
           // 파일별로 기억한다 — STL 은 단위가 없어서 매번 다시 고르게 되기 때문이다.
           void this.unitMemory.remember(session.documentUri.toString(), message.unit);
           break;
+        case 'gridChanged':
+          // 그리드도 배경과 같은 부류 — 사람 단위 표시 취향이므로 전역 설정에 저장한다.
+          void config.update('grid', message.grid, vscode.ConfigurationTarget.Global);
+          break;
         case 'backgroundChanged':
           // 배경은 파일이 아니라 사람 단위로 정해지는 값이므로 전역 설정에 저장한다.
           // 이 쓰기가 onDidChangeConfiguration 을 깨워 열려 있는 모든 뷰어로 전파된다.
@@ -121,6 +132,7 @@ export class ModelLensViewerProvider implements vscode.CustomReadonlyEditorProvi
       // 웹뷰 URI 에는 쿼리스트링이 붙으므로 확장자 추론에 맡기지 않고 원본 경로에서 뽑아 넘긴다.
       pluginExtension: pluginExtensionFor(document.uri.fsPath),
       background: readBackgroundMode(config),
+      grid: readGridSetting(config.get<unknown>('grid')),
       unitSetting: this.initialUnit(document.uri, config),
       decimals: config.get<number>('decimals', 3),
     });

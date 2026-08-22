@@ -12,6 +12,7 @@ const params = {
   fileName: 'cube.glb',
   pluginExtension: '.glb' as const,
   background: 'theme' as const,
+  grid: true,
   unitSetting: 'auto' as const,
   decimals: 3,
 };

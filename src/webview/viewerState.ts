@@ -43,9 +43,6 @@ export interface AnimationState {
 }
 
 export interface TogglesState {
-  grid: boolean;
-  axes: boolean;
-  wireframe: boolean;
   snap: boolean;
 }
 
@@ -62,7 +59,7 @@ export interface PersistedViewerState extends RestorableViewerState {
   version: number;
 }
 
-const DEFAULT_TOGGLES: TogglesState = { grid: true, axes: true, wireframe: false, snap: true };
+const DEFAULT_TOGGLES: TogglesState = { snap: true };
 
 export function serializeViewerState(state: RestorableViewerState): PersistedViewerState {
   return { version: VIEWER_STATE_VERSION, ...state };
@@ -149,9 +146,6 @@ function readToggles(raw: unknown): TogglesState {
     return { ...DEFAULT_TOGGLES };
   }
   return {
-    grid: readBoolean(raw.grid, DEFAULT_TOGGLES.grid),
-    axes: readBoolean(raw.axes, DEFAULT_TOGGLES.axes),
-    wireframe: readBoolean(raw.wireframe, DEFAULT_TOGGLES.wireframe),
     snap: readBoolean(raw.snap, DEFAULT_TOGGLES.snap),
   };
 }

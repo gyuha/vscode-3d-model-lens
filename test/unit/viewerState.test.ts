@@ -14,7 +14,7 @@ const sample: RestorableViewerState = {
   ],
   selectedIndex: 1,
   measureMode: true,
-  toggles: { grid: false, axes: true, wireframe: true, snap: false },
+  toggles: { snap: false },
   animation: { playing: false, selection: 1 },
 };
 
@@ -152,20 +152,17 @@ describe('restoreViewerState — 깨진 입력 방어', () => {
     const broken = {
       ...serializeViewerState(sample),
       measureMode: 'yes',
-      toggles: { grid: 'off', axes: 1, wireframe: null },
+      toggles: { snap: null },
     };
     const restored = restoreViewerState(broken);
     expect(restored?.measureMode).toBe(false);
-    expect(restored?.toggles).toEqual({ grid: true, axes: true, wireframe: false, snap: true });
+    expect(restored?.toggles).toEqual({ snap: true });
   });
 
   it('toggles 가 아예 없어도 기본값으로 복원된다', () => {
     const broken = { ...serializeViewerState(sample) } as Record<string, unknown>;
     delete broken.toggles;
     expect(restoreViewerState(broken)?.toggles).toEqual({
-      grid: true,
-      axes: true,
-      wireframe: false,
       snap: true,
     });
   });

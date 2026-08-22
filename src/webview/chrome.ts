@@ -1,4 +1,3 @@
-import { AxesViewer } from '@babylonjs/core/Debug/axesViewer.js';
 import { Color3 } from '@babylonjs/core/Maths/math.color.js';
 import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { CreateLineSystem } from '@babylonjs/core/Meshes/Builders/linesBuilder.js';
@@ -6,33 +5,21 @@ import { PBRMetallicRoughnessMaterial } from '@babylonjs/core/Materials/PBR/pbrM
 import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh.js';
 import type { Mesh } from '@babylonjs/core/Meshes/mesh.js';
 import type { Scene } from '@babylonjs/core/scene.js';
-import { extentDiagonal, extentSizes, niceStep, type Extents } from './geometry.js';
+import { extentSizes, niceStep, type Extents } from './geometry.js';
 
-/** 모델을 둘러싸는 보조 표시 — 그리드와 축. 크기는 모두 바운딩 박스에 비례한다. */
+/** 모델을 둘러싸는 보조 표시 — 그리드. 크기는 바운딩 박스에 비례한다. */
 export class Chrome {
   private readonly grid: Mesh;
-  private readonly axes: AxesViewer;
   private readonly meshes: AbstractMesh[];
   private wireframeOn = false;
 
   public constructor(scene: Scene, extents: Extents, meshes: AbstractMesh[]) {
     this.meshes = meshes;
     this.grid = buildGrid(scene, extents);
-    this.axes = new AxesViewer(scene, extentDiagonal(extents) * 0.25);
-    // 보조 표시는 픽 대상이 되어선 안 된다 — 축 화살표를 클릭하면 모델이 아닌
-    // 축 기하 위에 측정 점이 찍힌다.
-    makeUnpickable(this.axes);
   }
 
   public setGridVisible(visible: boolean): void {
     this.grid.setEnabled(visible);
-  }
-
-  public setAxesVisible(visible: boolean): void {
-    // AxesViewer 는 세 개의 TransformNode 로 구성되므로 각각 켜고 끈다.
-    for (const node of [this.axes.xAxis, this.axes.yAxis, this.axes.zAxis]) {
-      node.setEnabled(visible);
-    }
   }
 
   /**
@@ -50,15 +37,6 @@ export class Chrome {
 
   public get wireframe(): boolean {
     return this.wireframeOn;
-  }
-}
-
-/** AxesViewer 는 세 축을 TransformNode + 자식 메시로 만든다. 자식까지 모두 픽에서 제외한다. */
-function makeUnpickable(axes: AxesViewer): void {
-  for (const node of [axes.xAxis, axes.yAxis, axes.zAxis]) {
-    for (const mesh of node.getChildMeshes(false)) {
-      mesh.isPickable = false;
-    }
   }
 }
 
@@ -95,7 +73,8 @@ function buildGrid(scene: Scene, extents: Extents): Mesh {
  * 머티리얼이 없는 메시에 기본 머티리얼을 붙인다.
  *
  * 두 가지 이유로 필요하다.
- * (1) STL 로더는 머티리얼을 만들지 않고, 머티리얼이 없으면 와이어프레임 토글이 동작하지 않는다.
+ * (1) STL 로더는 머티리얼을 만들지 않고, 머티리얼이 없으면 `setWireframe` 이 그 메시에 아무
+ *     효과도 내지 못한다. 패널 토글은 제거됐지만 능력은 남아 있다 (ADR 260822-233935).
  * (2) PBR 을 쓴다 — StandardMaterial 은 환경 맵(IBL)을 쓰지 않아 STL 이 glTF 보다 훨씬
  *     어둡게 보인다. 같은 IBL 로 켜야 포맷 간 외형이 일관된다.
  */

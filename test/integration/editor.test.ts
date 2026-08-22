@@ -79,6 +79,19 @@ suite('3D Model Lens — 커스텀 에디터 등록', () => {
     );
   });
 
+  test('modelLens.grid 설정이 boolean 으로 기여되고 기본값이 true 다', () => {
+    const extension = vscode.extensions.getExtension(EXTENSION_ID);
+    assert.ok(extension);
+    const properties = extension.packageJSON.contributes.configuration.properties;
+
+    const grid = properties['modelLens.grid'];
+    assert.ok(grid, 'modelLens.grid 기여가 없습니다');
+    assert.equal(grid.type, 'boolean');
+    assert.equal(grid.default, true, '기본값이 true 여야 한다 — 기존 체감 동작과 같아야 한다');
+
+    assert.equal(vscode.workspace.getConfiguration('modelLens').get<boolean>('grid'), true);
+  });
+
   test('modelLens.background 설정이 3상태 enum 으로 기여되고 기본값이 theme 이다', () => {
     const extension = vscode.extensions.getExtension(EXTENSION_ID);
     assert.ok(extension);
