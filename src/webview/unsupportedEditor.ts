@@ -14,7 +14,7 @@
  * 사용자가 Inspector 에서 그 버튼을 누르면 조용한 실패 대신 아래 메시지가 뜬다.
  */
 const MESSAGE =
-  '3D Model Lens 는 읽기 전용 모델 뷰어입니다 — 노드/GUI 에디터는 지원하지 않습니다.';
+  '3D Model Lens is a read-only model viewer — node/GUI editors are not supported.';
 
 function unsupported(): never {
   throw new Error(MESSAGE);

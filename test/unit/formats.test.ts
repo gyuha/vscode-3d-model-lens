@@ -17,9 +17,9 @@ describe('pluginExtensionFor', () => {
   });
 
   it('지원하지 않는 확장자는 거부한다 — 참고 레포가 지원하던 obj/ply는 범위 밖이다', () => {
-    expect(() => pluginExtensionFor('/m/cube.obj')).toThrow(/지원하지 않는/);
-    expect(() => pluginExtensionFor('/m/cube.ply')).toThrow(/지원하지 않는/);
-    expect(() => pluginExtensionFor('/m/cube')).toThrow(/지원하지 않는/);
+    expect(() => pluginExtensionFor('/m/cube.obj')).toThrow(/Unsupported file type/);
+    expect(() => pluginExtensionFor('/m/cube.ply')).toThrow(/Unsupported file type/);
+    expect(() => pluginExtensionFor('/m/cube')).toThrow(/Unsupported file type/);
   });
 });
 

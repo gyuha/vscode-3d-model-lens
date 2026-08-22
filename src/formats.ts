@@ -28,9 +28,9 @@ export function isSupportedModelPath(fsPath: string): boolean {
 }
 
 function failUnsupported(fsPath: string, ext: string): never {
-  const shown = ext === '' ? '(확장자 없음)' : ext;
+  const shown = ext === '' ? '(no extension)' : ext;
   throw new Error(
-    `지원하지 않는 파일 형식입니다: ${shown} — ${path.basename(fsPath)}. ` +
-      `지원 포맷: ${SUPPORTED_EXTENSIONS.join(', ')}`,
+    `Unsupported file type: ${shown} — ${path.basename(fsPath)}. ` +
+      `Supported formats: ${SUPPORTED_EXTENSIONS.join(', ')}`,
   );
 }

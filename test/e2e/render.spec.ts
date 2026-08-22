@@ -1,8 +1,9 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import {
   axisPair,
   collectConsoleProblems,
   collectExternalRequests,
+  collectHostMessages,
   extents,
   isIdle,
   readyMeshes,
@@ -511,7 +512,7 @@ test.describe('애니메이션', () => {
     const select = page.locator('#animation-select');
     await expect(select).toHaveValue('all');
     // '전체' 다음에 파일의 그룹이 순서대로 온다.
-    await expect(select.locator('option')).toHaveText(['전체', 'rise', 'slide']);
+    await expect(select.locator('option')).toHaveText(['All', 'rise', 'slide']);
 
     await select.selectOption('1');
 
@@ -579,5 +580,79 @@ test.describe('Inspector 패널 토글', () => {
 
     await expect(page.locator('#root')).toHaveAttribute('data-inspector', 'off');
     await expect(page.locator('#toggle-inspector')).not.toBeChecked();
+  });
+});
+
+test.describe('배경 모드', () => {
+  /** 브라우저가 돌려주는 `rgb(r, g, b)` 를 헥사로 정규화한다. */
+  async function bodyBackground(page: Page): Promise<string> {
+    return page.evaluate(() => {
+      const rgb = getComputedStyle(document.body).backgroundColor;
+      const m = rgb.match(/\d+/g);
+      return m
+        ? '#' + m.slice(0, 3).map((n) => Number(n).toString(16).padStart(2, '0')).join('')
+        : rgb;
+    });
+  }
+
+  // theme 은 VS Code 편집기 배경색을 따라가고, light/dark 는 그것과 무관하게 고정한다.
+  // 그래서 테마와 모드를 **엇갈리게** 줘야 둘이 구분된다.
+  const CASES = [
+    { background: 'theme', theme: 'dark', expected: '#1f1f1f', note: '테마를 따라 어둡게' },
+    { background: 'theme', theme: 'light', expected: '#ffffff', note: '테마를 따라 밝게' },
+    { background: 'light', theme: 'dark', expected: '#ffffff', note: '어두운 테마에서도 순백' },
+    { background: 'dark', theme: 'light', expected: '#1f1f1f', note: '밝은 테마에서도 어둡게' },
+  ];
+
+  for (const c of CASES) {
+    test(`background=${c.background} + theme=${c.theme} → ${c.expected} (${c.note})`, async ({
+      page,
+    }) => {
+      await page.goto(`/?fixture=cube.glb&background=${c.background}&theme=${c.theme}`);
+      expect(await waitForViewer(page)).toBe('ready');
+      expect(await bodyBackground(page)).toBe(c.expected);
+    });
+  }
+});
+
+test.describe('배경 드롭다운', () => {
+  test('세 모드를 순서대로 내고 현재 값이 선택되어 있다', async ({ page }) => {
+    await page.goto('/?fixture=cube.glb&background=dark&theme=light');
+    expect(await waitForViewer(page)).toBe('ready');
+
+    const select = page.locator('#background-select');
+    await expect(select.locator('option')).toHaveText(['Theme', 'Light', 'Dark']);
+    await expect(select).toHaveValue('dark');
+  });
+
+  test('드롭다운을 바꾸면 배경이 즉시 바뀌고 호스트에 알린다 — 호스트가 전역 설정에 저장한다', async ({
+    page,
+  }) => {
+    await page.goto('/?fixture=cube.glb&background=theme&theme=dark');
+    expect(await waitForViewer(page)).toBe('ready');
+    const messages = await collectHostMessages(page);
+
+    await page.locator('#background-select').selectOption('light');
+
+    await expect(page.locator('#root')).toHaveAttribute('data-background', 'light');
+    expect(
+      await page.evaluate(() => getComputedStyle(document.body).backgroundColor),
+    ).toBe('rgb(255, 255, 255)');
+    expect(await messages()).toContainEqual({ type: 'backgroundChanged', background: 'light' });
+  });
+  test('호스트가 설정 변경을 알리면 배경과 드롭다운이 함께 따라온다 — 나란히 열린 다른 탭이 이 경로로 갱신된다', async ({
+    page,
+  }) => {
+    await page.goto('/?fixture=cube.glb&background=theme&theme=dark');
+    expect(await waitForViewer(page)).toBe('ready');
+    await expect(page.locator('#background-select')).toHaveValue('theme');
+
+    await sendHostMessage(page, { type: 'setBackground', background: 'light' });
+
+    await expect(page.locator('#root')).toHaveAttribute('data-background', 'light');
+    await expect(page.locator('#background-select')).toHaveValue('light');
+    expect(
+      await page.evaluate(() => getComputedStyle(document.body).backgroundColor),
+    ).toBe('rgb(255, 255, 255)');
   });
 });

@@ -86,6 +86,23 @@ export function axisPair(
   return undefined;
 }
 
+/**
+ * 웹뷰가 호스트로 보낸 메시지를 모으기 시작한다.
+ *
+ * UAT 셰임의 `postMessage` 는 `uat:tohost` CustomEvent 로 흘린다(`scripts/uat-serve.mjs`).
+ * 실제 확장에서는 이 자리에 `webview.onDidReceiveMessage` 가 있다 — 즉 이 헬퍼가 보는 것은
+ * **호스트가 실제로 받게 될 메시지**다.
+ */
+export async function collectHostMessages(page: Page): Promise<() => Promise<unknown[]>> {
+  await page.evaluate(() => {
+    const sink: unknown[] = [];
+    (window as unknown as { __hostMessages: unknown[] }).__hostMessages = sink;
+    window.addEventListener('uat:tohost', (event) => sink.push((event as CustomEvent).detail));
+  });
+  return () =>
+    page.evaluate(() => (window as unknown as { __hostMessages: unknown[] }).__hostMessages);
+}
+
 /** 확장 호스트가 보내는 것과 동일한 메시지. */
 export async function sendHostMessage(page: Page, message: unknown): Promise<void> {
   await page.evaluate((m) => window.postMessage(m, '*'), message);

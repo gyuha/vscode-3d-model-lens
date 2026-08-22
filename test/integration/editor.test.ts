@@ -79,6 +79,31 @@ suite('3D Model Lens — 커스텀 에디터 등록', () => {
     );
   });
 
+  test('modelLens.background 설정이 3상태 enum 으로 기여되고 기본값이 theme 이다', () => {
+    const extension = vscode.extensions.getExtension(EXTENSION_ID);
+    assert.ok(extension);
+    const properties = extension.packageJSON.contributes.configuration.properties;
+
+    const background = properties['modelLens.background'];
+    assert.ok(background, 'modelLens.background 기여가 없습니다');
+    assert.equal(background.default, 'theme');
+    assert.deepEqual(background.enum, ['theme', 'light', 'dark']);
+    assert.equal(
+      background.enumDescriptions.length,
+      background.enum.length,
+      'enum 과 enumDescriptions 개수가 다릅니다',
+    );
+
+    // 같은 것을 다투는 설정이 둘이면 사용자는 "왜 토글이 안 먹히지"를 겪는다 (ADR 260822-195326).
+    assert.equal(
+      properties['modelLens.backgroundColor'],
+      undefined,
+      'modelLens.backgroundColor 가 아직 남아 있습니다',
+    );
+
+    assert.equal(vscode.workspace.getConfiguration('modelLens').get<string>('background'), 'theme');
+  });
+
   test('modelLens.unit / modelLens.decimals 설정이 기여되고 기본값이 auto / 3 이다', () => {
     const extension = vscode.extensions.getExtension(EXTENSION_ID);
     assert.ok(extension);

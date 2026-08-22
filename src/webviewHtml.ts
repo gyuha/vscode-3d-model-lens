@@ -1,3 +1,4 @@
+import { BACKGROUND_MODES, type BackgroundMode } from './background';
 import type { SupportedExtension } from './formats';
 import { UNIT_SETTINGS, type UnitSetting } from './units';
 
@@ -16,8 +17,8 @@ export interface WebviewHtmlParams {
   fileName: string;
   /** Babylon `SceneLoader` 에 넘길 플러그인 확장자 — 원본 경로에서 뽑은 값 */
   pluginExtension: SupportedExtension;
-  /** 사용자 지정 배경색. 빈 문자열이면 VS Code 편집기 배경색을 따른다 */
-  backgroundColor: string;
+  /** 배경 모드. `theme` 은 VS Code 편집기 배경색을 따른다 */
+  background: BackgroundMode;
   /** 단위 초기값. `auto` 는 포맷에서 유추한다 */
   unitSetting: UnitSetting;
   /** 표시 소수점 자릿수 */
@@ -56,17 +57,29 @@ export function buildWebviewHtml(params: WebviewHtmlParams): string {
       assetBaseUri: params.assetBaseUri,
       fileName: params.fileName,
       pluginExtension: params.pluginExtension,
-      backgroundColor: params.backgroundColor,
+      background: params.background,
       unitSetting: params.unitSetting,
       decimals: params.decimals,
     }),
   );
 
+  // 배경 목록의 단일 출처는 background.ts 다. 라벨만 여기서 붙인다.
+  const BACKGROUND_LABELS: Record<BackgroundMode, string> = {
+    theme: 'Theme',
+    light: 'Light',
+    dark: 'Dark',
+  };
+  const backgroundOptions = BACKGROUND_MODES.map(
+    (mode) =>
+      `        <option value="${mode}"${mode === params.background ? ' selected' : ''}>` +
+      `${BACKGROUND_LABELS[mode]}</option>`,
+  ).join('\n');
+
   // 단위 목록의 단일 출처는 units.ts 다 — 여기서 하드코딩하지 않는다.
   const unitOptions = UNIT_SETTINGS.map(
     (unit) =>
       `        <option value="${unit}"${unit === params.unitSetting ? ' selected' : ''}>` +
-      `${unit === 'auto' ? '자동' : unit}</option>`,
+      `${unit === 'auto' ? 'Auto' : unit}</option>`,
   ).join('\n');
 
   return `<!DOCTYPE html>
@@ -127,7 +140,9 @@ export function buildWebviewHtml(params: WebviewHtmlParams): string {
     text-align: right; font-variant-numeric: tabular-nums;
   }
 
-  #unit-row { display: flex; align-items: center; gap: 0.5rem; justify-content: space-between; }
+  #unit-row, #background-row {
+    display: flex; align-items: center; gap: 0.5rem; justify-content: space-between;
+  }
   #labels { position: absolute; inset: 0; pointer-events: none; }
   .measure-label {
     position: absolute; top: 0; left: 0; white-space: nowrap;
@@ -145,7 +160,7 @@ export function buildWebviewHtml(params: WebviewHtmlParams): string {
 
   #measure-list { display: flex; flex-direction: column; gap: 0.125rem; max-height: 11rem; overflow-y: auto; }
   #measure-list:empty::after {
-    content: '측정 모드를 켜고 두 점을 찍으세요';
+    content: 'Turn on measure mode and pick two points';
     color: var(--vscode-descriptionForeground); font-style: italic;
   }
   #measure-list .row { display: flex; align-items: center; gap: 0.375rem; }
@@ -181,7 +196,7 @@ export function buildWebviewHtml(params: WebviewHtmlParams): string {
     white-space: nowrap;
   }
 
-  #unit-row select, #animation-row select {
+  #unit-row select, #animation-row select, #background-row select {
     background: var(--vscode-dropdown-background);
     color: var(--vscode-dropdown-foreground);
     border: 1px solid var(--vscode-dropdown-border, transparent);
@@ -201,7 +216,7 @@ export function buildWebviewHtml(params: WebviewHtmlParams): string {
     </div>
 
     <div id="unit-row">
-      <label for="unit">단위</label>
+      <label for="unit">Unit</label>
       <select id="unit">
 ${unitOptions}
       </select>
@@ -210,24 +225,31 @@ ${unitOptions}
     <hr id="animation-sep" hidden />
 
     <div id="animation-row" hidden>
-      <button type="button" id="animation-toggle">일시정지</button>
-      <select id="animation-select" aria-label="애니메이션"></select>
+      <button type="button" id="animation-toggle">Pause</button>
+      <select id="animation-select" aria-label="Animation"></select>
     </div>
 
     <hr />
 
     <div id="measure-actions">
-      <span class="state" id="measure-state">측정 꺼짐</span>
-      <button type="button" id="measure-clear">전체 삭제</button>
+      <span class="state" id="measure-state">Measure off</span>
+      <button type="button" id="measure-clear">Clear all</button>
     </div>
-    <label><input type="checkbox" id="toggle-snap" checked /> 정점 스냅</label>
+    <label><input type="checkbox" id="toggle-snap" checked /> Vertex snap</label>
     <div id="measure-list"></div>
 
     <hr />
 
-    <label><input type="checkbox" id="toggle-grid" checked /> 그리드</label>
-    <label><input type="checkbox" id="toggle-axes" checked /> 축</label>
-    <label><input type="checkbox" id="toggle-wireframe" /> 와이어프레임</label>
+    <label><input type="checkbox" id="toggle-grid" checked /> Grid</label>
+    <label><input type="checkbox" id="toggle-axes" checked /> Axes</label>
+    <label><input type="checkbox" id="toggle-wireframe" /> Wireframe</label>
+
+    <div id="background-row">
+      <label for="background-select">Background</label>
+      <select id="background-select">
+${backgroundOptions}
+      </select>
+    </div>
 
     <hr />
 
@@ -236,7 +258,7 @@ ${unitOptions}
 
   <div id="labels"></div>
 
-  <div class="overlay" id="loading">모델을 불러오는 중…</div>
+  <div class="overlay" id="loading">Loading model…</div>
 
   <div class="overlay" id="error" hidden>
     <div class="name"></div>

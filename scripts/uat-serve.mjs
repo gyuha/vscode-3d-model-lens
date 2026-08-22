@@ -115,7 +115,7 @@ createServer((req, res) => {
     assetBaseUri: `${origin}/media`,
     fileName: fixture,
     pluginExtension,
-    backgroundColor: '',
+    background: url.searchParams.get('background') ?? 'theme',
     unitSetting: url.searchParams.get('unit') ?? 'auto',
     decimals: Number(url.searchParams.get('decimals') ?? 3),
   });
@@ -141,4 +141,5 @@ createServer((req, res) => {
   console.log(`  픽스처: cube.gltf · cube.glb · cube.stl · animated.glb · broken.glb`);
   console.log(`  테마:   dark · light`);
   console.log(`  단위:   ?unit=auto|mm|cm|m|in   자릿수: ?decimals=0..10`);
+  console.log(`  배경:   ?background=theme|light|dark`);
 });

@@ -1,3 +1,4 @@
+import { backgroundColorFor, isBackgroundMode, type BackgroundMode } from '../background.js';
 import type { HostToWebview, WebviewToHost } from '../messages.js';
 import { formatLength, isUnitSetting, resolveUnit, type UnitSetting } from '../units.js';
 import type { Chrome } from './chrome.js';
@@ -53,9 +54,18 @@ if (restored) {
   setChecked('toggle-snap', restored.toggles.snap);
 }
 
-if (config.backgroundColor) {
-  // 사용자가 배경색을 지정한 경우에만 덮어쓴다. 기본값은 CSS 의 테마 변수를 그대로 둔다.
-  document.body.style.background = config.backgroundColor;
+applyBackground(config.background);
+
+/**
+ * 배경 모드를 실제 색으로 적용한다.
+ *
+ * `theme` 이면 인라인 스타일을 **지운다** — CSS 의 `--vscode-editor-background` 가 다시
+ * 드러나야 하기 때문이다. 그냥 두면 이전 모드의 색이 남아 테마 따르기가 깨진다.
+ */
+function applyBackground(mode: BackgroundMode): void {
+  const color = backgroundColorFor(mode);
+  document.body.style.background = color ?? '';
+  root.dataset.background = mode;
 }
 
 void boot();
@@ -65,8 +75,8 @@ async function boot(): Promise<void> {
     const viewer = await createViewer(canvas, labelHost, config, restored?.camera ?? null, (ratio) => {
       loading.textContent =
         ratio === undefined
-          ? '모델을 불러오는 중…'
-          : `모델을 불러오는 중… ${Math.round(ratio * 100)}%`;
+          ? 'Loading model…'
+          : `Loading model… ${Math.round(ratio * 100)}%`;
     });
 
     loading.hidden = true;
@@ -79,6 +89,7 @@ async function boot(): Promise<void> {
     wireUnits(sizes, viewer.measure);
     wireMeasurePanel(viewer.measure, viewer);
     wireAnimationPanel(viewer);
+    wireBackgroundPanel();
 
     root.dataset.state = 'ready';
     root.dataset.meshCount = String(viewer.meshes.length);
@@ -283,7 +294,7 @@ function wireMeasurePanel(measure: MeasurementTool, viewer: Viewer): void {
   measure.onChange = (): void => {
     // 측정이 추가·삭제·선택되면 선·마커가 바뀌므로 다시 그린다.
     viewer.markDirty();
-    state.textContent = measure.isActive ? '측정 켜짐 — 두 점을 찍으세요' : '측정 꺼짐';
+    state.textContent = measure.isActive ? 'Measure on — pick two points' : 'Measure off';
     root.dataset.measure = measure.isActive ? 'on' : 'off';
     root.dataset.measureCount = String(measure.list.length);
 
@@ -296,7 +307,7 @@ function wireMeasurePanel(measure: MeasurementTool, viewer: Viewer): void {
         pick.type = 'button';
         pick.className = 'pick';
         pick.textContent = measure.labelFor(measurement);
-        pick.title = '선택';
+        pick.title = 'Select';
         pick.addEventListener('click', () =>
           measure.select(measurement.id === measure.selected ? undefined : measurement.id),
         );
@@ -305,7 +316,7 @@ function wireMeasurePanel(measure: MeasurementTool, viewer: Viewer): void {
         remove.type = 'button';
         remove.className = 'remove';
         remove.textContent = '✕';
-        remove.title = '삭제';
+        remove.title = 'Remove';
         remove.addEventListener('click', () => measure.remove(measurement.id));
 
         row.append(pick, remove);
@@ -314,6 +325,25 @@ function wireMeasurePanel(measure: MeasurementTool, viewer: Viewer): void {
     );
   };
   measure.onChange();
+}
+
+/**
+ * 배경 드롭다운.
+ *
+ * 선택을 호스트에 알리면 호스트가 **전역 설정**에 저장하고, 그 설정 변경이 열려 있는 모든
+ * 뷰어로 되돌아온다(`setBackground`). 즉 이 웹뷰도 자기 선택을 호스트를 거쳐 다시 받는데,
+ * `applyBackground` 는 멱등이고 프로그래매틱한 `value` 대입은 `change` 를 다시 쏘지 않으므로
+ * 루프가 생기지 않는다.
+ */
+function wireBackgroundPanel(): void {
+  const select = requireElement<HTMLSelectElement>('background-select');
+  select.addEventListener('change', () => {
+    if (!isBackgroundMode(select.value)) {
+      return;
+    }
+    applyBackground(select.value);
+    post({ type: 'backgroundChanged', background: select.value });
+  });
 }
 
 /**
@@ -335,9 +365,9 @@ function wireAnimationPanel(viewer: Viewer): void {
   }
 
   select.replaceChildren(
-    ...['전체', ...animations.names].map((label, index) => {
+    ...['All', ...animations.names].map((label, index) => {
       const option = document.createElement('option');
-      // 첫 항목이 '전체'이므로 그룹 인덱스는 하나씩 밀린다.
+      // 첫 항목이 'All' 이므로 그룹 인덱스는 하나씩 밀린다.
       option.value = index === 0 ? 'all' : String(index - 1);
       option.textContent = label;
       return option;
@@ -352,7 +382,7 @@ function wireAnimationPanel(viewer: Viewer): void {
   );
 
   animations.onChange = (): void => {
-    toggle.textContent = animations.isPlaying ? '일시정지' : '재생';
+    toggle.textContent = animations.isPlaying ? 'Pause' : 'Play';
     select.value = animations.selection === 'all' ? 'all' : String(animations.selection);
     root.dataset.animation = animations.isPlaying ? 'playing' : 'paused';
     // 일시정지 직후의 정리 렌더. 재생 중에는 렌더 루프가 알아서 계속 그린다.
@@ -368,6 +398,11 @@ function wireAnimationPanel(viewer: Viewer): void {
 function wireHostMessages(viewer: Viewer): void {
   window.addEventListener('message', (event: MessageEvent<HostToWebview>) => {
     const message = event.data;
+    if (message?.type === 'setBackground') {
+      applyBackground(message.background);
+      requireElement<HTMLSelectElement>('background-select').value = message.background;
+      return;
+    }
     if (message?.type === 'setMeasureMode') {
       viewer.setMeasureMode(message.active);
       post({ type: 'measureModeState', active: message.active });
@@ -406,7 +441,7 @@ function applyInspector(viewer: Viewer, visible: boolean): void {
       checkbox.checked = false;
       viewer.setContinuousRendering(false);
       post({ type: 'inspectorFailed', message: describeError(error) });
-      console.error('[3D Model Lens] Inspector 실패', error);
+      console.error('[3D Model Lens] Inspector failed', error);
     })
     .finally(() => {
       checkbox.disabled = false;
@@ -431,12 +466,12 @@ function showError(error: unknown): void {
   const name = errorBox.querySelector<HTMLDivElement>('.name');
   const message = errorBox.querySelector<HTMLDivElement>('.message');
   if (name) {
-    name.textContent = `${config.fileName} 을(를) 열 수 없습니다`;
+    name.textContent = `Cannot open ${config.fileName}`;
   }
   if (message) {
     message.textContent = describeError(error);
   }
-  console.error('[3D Model Lens] 모델 로드 실패', error);
+  console.error('[3D Model Lens] Failed to load model', error);
 }
 
 function describeError(error: unknown): string {
@@ -449,7 +484,7 @@ function describeError(error: unknown): string {
 function readConfig(element: HTMLElement): ViewerConfig {
   const raw = element.dataset.config;
   if (!raw) {
-    throw new Error('뷰어 설정(data-config)이 없습니다.');
+    throw new Error('Viewer config (data-config) is missing.');
   }
   return JSON.parse(raw) as ViewerConfig;
 }
@@ -457,7 +492,7 @@ function readConfig(element: HTMLElement): ViewerConfig {
 function requireElement<T extends HTMLElement>(id: string): T {
   const element = document.getElementById(id);
   if (!element) {
-    throw new Error(`필수 요소를 찾을 수 없습니다: #${id}`);
+    throw new Error(`Required element not found: #${id}`);
   }
   return element as T;
 }

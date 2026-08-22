@@ -11,6 +11,7 @@ import { Matrix, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { Viewport } from '@babylonjs/core/Maths/math.viewport.js';
 import { Scene } from '@babylonjs/core/scene.js';
 import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh.js';
+import type { BackgroundMode } from '../background.js';
 import type { SupportedExtension } from '../formats.js';
 import { resolveUnit, type UnitSetting } from '../units.js';
 import type { CameraState } from './viewerState.js';
@@ -30,7 +31,7 @@ export interface ViewerConfig {
   environmentUri: string;
   fileName: string;
   pluginExtension: SupportedExtension;
-  backgroundColor: string;
+  background: BackgroundMode;
   unitSetting: UnitSetting;
   decimals: number;
 }
@@ -85,7 +86,7 @@ export async function createViewer(
   // WebGL2 로 고정한다 — WebGPU 는 웹뷰에서 지원이 불안정하고 CSP/워커 요구가 더 크다.
   const engine = new Engine(canvas, true, { alpha: true, stencil: true }, true);
   if (engine.webGLVersion < 2) {
-    console.warn('[3D Model Lens] WebGL2 를 쓸 수 없어 WebGL1 로 동작합니다. 렌더링이 제한될 수 있습니다.');
+    console.warn('[3D Model Lens] WebGL2 is unavailable; falling back to WebGL1. Rendering may be limited.');
   }
 
   const scene = new Scene(engine);
@@ -109,7 +110,7 @@ export async function createViewer(
 
   const meshes = container.meshes.filter((mesh) => mesh.getTotalVertices() > 0);
   if (meshes.length === 0) {
-    throw new Error('모델에 렌더할 수 있는 메시가 없습니다.');
+    throw new Error('The model has no renderable mesh.');
   }
   ensureMaterials(scene, meshes);
 

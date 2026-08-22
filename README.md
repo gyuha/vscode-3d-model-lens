@@ -1,127 +1,125 @@
 # 3D Model Lens
 
-VS Code에서 3D 모델을 보고 **크기를 정직하게 읽어내는** 확장. Babylon.js 기반.
+A VS Code extension for viewing 3D models and **reading their size honestly**. Built on Babylon.js.
 
-## 지원 포맷
+## Supported formats
 
-| 포맷 | 비고 |
+| Format | Notes |
 |---|---|
-| `.gltf` | 외부 `.bin`·텍스처 참조 지원 |
-| `.glb` | 바이너리 컨테이너 |
-| `.stl` | ASCII / 바이너리 |
+| `.gltf` | Resolves external `.bin` and texture references |
+| `.glb` | Binary container |
+| `.stl` | ASCII / binary |
 
-파일을 클릭하면 뷰어가 열립니다. 텍스트로 보려면 `Reopen Editor With… → Text Editor`.
+Click a file and the viewer opens. To see it as text, use `Reopen Editor With… → Text Editor`.
 
-## 치수
+## Dimensions
 
-파일을 열면 뷰어 패널에 바운딩 박스의 `X / Y / Z` 크기가 바로 표시됩니다.
+Opening a file immediately shows the bounding box `X / Y / Z` size in the viewer panel.
 
-단위는 패널 드롭다운에서 고릅니다. 기본 `자동`은 **glTF/GLB 를 미터**로(스펙이 그렇게 정의합니다),
-**STL 은 라벨 없이 순수 숫자**로 표시합니다 — STL 포맷에는 단위 필드가 없어서 mm 이라고 단정할 수 없습니다.
-사용자가 고른 단위는 **파일별로 기억**되므로, 같은 STL 을 다시 열면 그 단위가 복원됩니다.
-단위는 표시 라벨만 바꾸며 기하 변환은 하지 않습니다("모델 좌표 1 = 이 단위 1").
+Pick the unit from the panel dropdown. The default `Auto` shows **meters for glTF/GLB** (the spec defines
+it that way) and **plain numbers with no label for STL** — the STL format has no unit field, so we cannot
+claim it is millimeters. Your chosen unit is **remembered per file**, so reopening the same STL restores it.
+The unit changes only the displayed label; no geometry is transformed ("1 model unit = 1 of this unit").
 
-## 이 확장이 하지 않는 것
+## What this extension does not do
 
-의도적으로 뺀 것들이며, 각각 이유가 있습니다.
+Each omission is deliberate, and each has a reason.
 
-- **OBJ / OFF / PLY / PCD / XYZ 미지원.** Babylon 기본 로더 범위 밖이고, 포인트 클라우드는 측정 UX가 근본적으로 다릅니다.
-- **각도 측정 미지원.** 거리 측정의 피킹·스냅·라벨 인프라를 재사용하면 나중에 붙이는 비용이 싸므로 후속 작업으로 남겼습니다.
-- **측정 결과를 파일로 저장하지 않습니다.** 사이드카 파일 포맷 설계가 별개 작업입니다.
-- **부피 / 표면적 미지원.** 닫히지 않은(non-watertight) 메시에서 부피는 의미 없는 숫자가 나옵니다. 그럴듯한 오답을 보여주는 건 기능이 없는 것보다 나쁩니다.
-- **바운딩 박스를 "가로 × 높이 × 깊이"로 부르지 않습니다.** `X / Y / Z`로만 표기합니다. glTF 로더의 좌표계 변환과 CAD 출신 파일의 Z-up 때문에, 그렇게 부르면 절반은 틀립니다.
-- **Draco / meshopt 압축, KTX2·Basis 텍스처 미지원.** 이들은 외부 CDN에서 디코더를 가져오는데, 웹뷰 CSP가 이를 차단합니다. 등록하지 않아 "지원하지 않는 확장"으로 명확히 보고합니다 — 조용한 실패보다 낫습니다.
-- **STL 의 축을 파일 그대로 씁니다.** Babylon 은 기본적으로 STL 의 Y·Z 를 맞바꾸지만(STL 은 Z-up, Babylon 은 Y-up), 그러면 파일이 `Z=30`이라 말하는데 뷰어가 `Y=30`이라 표시합니다. 측정 도구에서 그건 거짓말이라, Z-up CAD 파일이 옆으로 누워 보이는 대가를 택했습니다.
-- **`../` 상위 디렉터리를 참조하는 텍스처.** 웹뷰의 리소스 허용 범위는 확장 디렉터리 · 워크스페이스 폴더 · 모델 파일의 디렉터리로 제한합니다. 파일 시스템 루트를 열어주는 것보다 이 한계가 낫습니다.
+- **No OBJ / OFF / PLY / PCD / XYZ.** They fall outside Babylon's built-in loaders, and point clouds have a fundamentally different measurement UX.
+- **No angle measurement.** Reusing the picking, snapping, and label infrastructure from distance measurement makes this cheap to add later, so it is left as follow-up work.
+- **Measurements are not saved to a file.** Designing a sidecar file format is a separate piece of work.
+- **No volume / surface area.** On non-watertight meshes, volume produces a meaningless number. Showing a plausible wrong answer is worse than having no feature at all.
+- **The bounding box is never called "width × height × depth".** It is labeled `X / Y / Z` only. Because of the glTF loader's coordinate-system conversion and the Z-up convention in CAD-origin files, those names would be wrong half the time.
+- **No Draco / meshopt compression, no KTX2 / Basis textures.** These fetch their decoders from external CDNs, which the webview CSP blocks. By not registering them, we report a clear "unsupported extension" instead of failing silently.
+- **STL axes are used exactly as the file states them.** Babylon swaps STL's Y and Z by default (STL is Z-up, Babylon is Y-up), but then the file says `Z=30` while the viewer displays `Y=30`. In a measurement tool that is a lie, so we accept the cost of Z-up CAD files appearing to lie on their side.
+- **Textures referenced through `../`.** The webview's allowed resource roots are limited to the extension directory, the workspace folder, and the model file's own directory. That limit is better than opening the filesystem root.
 
-## 리소스
+## Resources
 
-3D 뷰어는 가만히 있어도 GPU 를 태우기 쉬워서, 두 가지로 막습니다.
+A 3D viewer burns GPU even while sitting still, so two things prevent that.
 
-- **유휴 시 렌더 중단.** 카메라·측정·표시 설정 중 아무것도 바뀌지 않으면 프레임을 그리지 않습니다.
-  정지된 모델을 보고 있는 동안 GPU 작업은 0 입니다. 조작하면 즉시 다시 그립니다.
-  Inspector 를 켠 동안에는 fps 카운터와 기즈모가 렌더 루프에 의존하므로 연속으로 그립니다.
-- **배경 탭은 살려 두지 않습니다.** VS Code 가 보이지 않는 탭의 웹뷰를 파괴하도록 두므로
-  (`retainContextWhenHidden` 을 쓰지 않습니다), 열어 둔 탭 수만큼 WebGL 컨텍스트가 쌓이지 않습니다.
-  살아 있는 3D 컨텍스트는 **화면에 보이는 뷰어** 뿐입니다.
+- **Rendering stops when idle.** If nothing has changed among the camera, measurements, and display settings, no frame is drawn. While you look at a stationary model, GPU work is zero. Any interaction redraws immediately.
+  While the Inspector is open we render continuously, because its fps counter and gizmos depend on the render loop.
+- **Background tabs are not kept alive.** We let VS Code destroy the webview of a hidden tab (we do not use
+  `retainContextWhenHidden`), so WebGL contexts do not pile up with the number of open tabs.
+  The only live 3D context is the **viewer you can see**.
 
-그 대가로 탭을 전환하면 모델을 다시 로드하는 지연이 있습니다. 대신 **측정·카메라 위치·표시
-토글·측정 모드는 그대로 복원**되므로 작업이 끊기지 않습니다(VS Code 를 재시작하면 초기화됩니다).
+The cost is a reload delay when you switch back to a tab. In exchange, **measurements, camera position,
+display toggles, and measure mode are all restored**, so your work is not interrupted (restarting VS Code
+clears them).
 
-모델 파일을 연달아 클릭할 때 탭이 하나만 쓰이는지는 VS Code 의 `workbench.editor.enablePreview`
-설정이 결정합니다(기본 `true` — 단일 클릭은 탭을 재사용합니다).
+Whether clicking model files in a row reuses a single tab is decided by VS Code's
+`workbench.editor.enablePreview` setting (default `true` — a single click reuses the tab).
 
-## 외부 네트워크를 쓰지 않습니다
+## No external network access
 
-모델 로딩·환경 조명(IBL)·Inspector 모두 확장에 번들된 로컬 리소스만 사용합니다.
-웹뷰 CSP가 `default-src 'none'`으로 외부 요청을 구조적으로 차단하고,
-`npm run check:bundle`이 빌드 산출물에 새 외부 의존이 들어오지 않았는지 감시합니다.
+Model loading, environment lighting (IBL), and the Inspector all use only local resources bundled with the
+extension. The webview CSP structurally blocks outbound requests with `default-src 'none'`, and
+`npm run check:bundle` watches for new external dependencies creeping into the build output.
 
-## 측정
+## Measurement
 
-제목 표시줄의 측정 아이콘(또는 명령 팔레트의 `3D Model Lens: 측정 모드 켜기/끄기`)으로 측정 모드를 켜고,
-표면의 **두 점을 찍으면** 거리가 하나 만들어집니다. 측정 모드에서도 **드래그로 화면을 돌릴 수 있습니다** —
-움직임이 임계값을 넘으면 측정 점을 찍지 않습니다.
+Turn on measure mode with the measure icon in the editor title bar (or `3D Model Lens: Toggle Measure Mode`
+from the command palette), then **pick two points** on the surface to create one distance. You can still
+**drag to orbit** while in measure mode — movement past a threshold does not place a measurement point.
 
-- **정점 스냅**(기본 켜짐): 클릭한 삼각형의 세 정점 중 가장 가까운 것으로 붙습니다. 코너·모서리 치수를
-  정확히 재는 데 필요합니다. 어디에 정점이 있는지 보려면 와이어프레임을 켜세요.
-- 측정선과 마커는 **모델을 관통해서** 보입니다. 마커 크기는 모델 크기에 비례하므로 아주 작은 모델과
-  아주 큰 모델 모두에서 보입니다.
-- 측정은 목록에 쌓입니다. 항목을 눌러 선택하고, `✕` 로 하나만, `전체 삭제` 로 모두 지웁니다.
-- 단위를 바꾸면 이미 만든 측정의 라벨도 함께 갱신됩니다.
-- **측정은 세션 한정입니다** — 탭을 닫으면 사라집니다. 파일로 저장하지 않습니다.
-- Inspector 를 켠 상태에서도 측정할 수 있습니다.
+- **Vertex snap** (on by default): snaps to the nearest of the three vertices of the triangle you clicked. This is what you need to measure corner and edge dimensions accurately. Turn on wireframe to see where the vertices are.
+- Measurement lines and markers are drawn **through the model** so they stay visible. Marker size scales with model size, so they are visible on both very small and very large models.
+- Measurements accumulate in a list. Click an entry to select it, `✕` to remove one, `Clear all` to remove them all.
+- Changing the unit also refreshes the labels of measurements you already made.
+- **Measurements are session-scoped** — closing the tab discards them. They are not saved to a file.
+- You can measure while the Inspector is open.
 
-각도·표면적·부피는 지원하지 않습니다(아래 참조).
+Angles, surface area, and volume are not supported (see above).
 
 ## Inspector
 
-Babylon Inspector 를 편집기 제목 표시줄 아이콘이나 명령 팔레트(`3D Model Lens: Inspector 켜기/끄기`)로 켜고 끕니다.
-노드 계층·머티리얼·텍스처·렌더링 상태를 볼 수 있습니다.
+Toggle the Babylon Inspector from the editor title bar icon or the command palette
+(`3D Model Lens: Toggle Inspector`). It shows the node hierarchy, materials, textures, and rendering state.
 
-Inspector 는 무거워서(React + FluentUI) **켤 때만 로드**되는 별도 chunk 로 분리해 두었습니다 —
-모델만 볼 때는 로드도 파싱도 되지 않습니다.
+The Inspector is heavy (React + FluentUI), so it lives in a separate chunk that **loads only when you turn it
+on** — viewing a model alone neither downloads nor parses it.
 
-읽기 전용 뷰어이므로 **노드/GUI 에디터는 지원하지 않습니다**. Inspector 안의 해당 버튼을 누르면
-그렇게 안내합니다(약 10 MB 와 여러 외부 CDN 의존을 함께 덜어냈습니다).
+Because this is a read-only viewer, **node and GUI editors are not supported**. Pressing those buttons inside
+the Inspector says so (this also removed roughly 10 MB and several external CDN dependencies).
 
-## 설정
+## Settings
 
-| 설정 | 기본값 | 설명 |
+| Setting | Default | Description |
 |---|---|---|
-| `modelLens.backgroundColor` | (빈 값) | 뷰어 배경색. 비워 두면 VS Code 편집기 배경색을 따릅니다. |
-| `modelLens.inspectorOnStart` | `false` | 모델을 열 때 Inspector 를 켠 상태로 시작합니다. |
-| `modelLens.unit` | `auto` | 치수·측정 단위의 **초기값**. `auto` 는 glTF/GLB → `m`, STL → 라벨 없음. 뷰어 패널에서 파일별로 바꿀 수 있고 그 선택이 기억됩니다. |
-| `modelLens.decimals` | `3` | 표시 소수점 자릿수 (0~10). |
+| `modelLens.background` | `theme` | Viewer background mode. `theme` follows the VS Code editor background color; `light` (`#ffffff`) and `dark` (`#1f1f1f`) pin it regardless of the theme. Changing it from the viewer panel saves it here. |
+| `modelLens.inspectorOnStart` | `false` | Start with the Inspector open when a model is opened. |
+| `modelLens.unit` | `auto` | **Initial** unit for dimensions and measurements. `auto` means `m` for glTF/GLB and no label for STL. Changeable per file from the viewer panel, and that choice is remembered. |
+| `modelLens.decimals` | `3` | Number of decimal places displayed (0–10). |
 
-## 개발
+## Development
 
 ```bash
 npm install
-npm run build              # 확장 호스트 + 웹뷰 번들
-npm run watch              # 감시 모드
-npm test                   # 유닛 테스트 (vitest)
-npm run test:integration   # 확장 호스트 통합 테스트 (실제 VS Code 를 띄움)
-npm run test:e2e           # 웹뷰 렌더 테스트 (Playwright, 헤드리스 Chromium)
-npm run check:bundle       # 산출물의 외부 의존 검사
-npm run fixtures           # 테스트 픽스처 재생성
-npm run uat                # 웹뷰를 브라우저에 띄워 확인 (F5 대신 빠르게 볼 때)
-npm run package            # .vsix 생성
+npm run build              # extension host + webview bundles
+npm run watch              # watch mode
+npm test                   # unit tests (vitest)
+npm run test:integration   # extension host integration tests (launches a real VS Code)
+npm run test:e2e           # webview render tests (Playwright, headless Chromium)
+npm run check:bundle       # check build output for external dependencies
+npm run fixtures           # regenerate test fixtures
+npm run uat                # serve the webview in a browser (a fast alternative to F5)
+npm run package            # produce a .vsix
 ```
 
-F5로 확장 개발 호스트를 띄운 뒤 `test/fixtures/` 의 모델을 열어 확인합니다.
+Press F5 to launch the extension development host, then open a model from `test/fixtures/`.
 
-검증은 세 겹입니다.
+Verification comes in three layers.
 
-| 계층 | 무엇을 잡는가 | 명령 |
+| Layer | What it catches | Command |
 |---|---|---|
-| 유닛 (vitest) | 거리·스냅·단위·치수 수학, CSP 생성, 픽스처 무결성. NullEngine 으로 실제 로더도 돌립니다 | `npm test` |
-| 확장 호스트 (`@vscode/test-cli`) | CustomEditor 등록, 명령·설정 기여, 제목 표시줄 노출 | `npm run test:integration` |
-| 웹뷰 렌더 (Playwright) | **실제 함정들** — CSP 가 외부 요청을 막는가, IBL 이 로드되는가, 세 포맷의 치수가 맞는가, 실제 마우스 클릭으로 잰 거리가 맞는가 | `npm run test:e2e` |
+| Unit (vitest) | Distance, snapping, unit, and dimension math; CSP generation; fixture integrity. Also runs the real loaders through NullEngine | `npm test` |
+| Extension host (`@vscode/test-cli`) | CustomEditor registration, command and setting contributions, title bar exposure | `npm run test:integration` |
+| Webview render (Playwright) | **The real traps** — does the CSP block external requests, does the IBL load, are the dimensions right across all three formats, is a distance measured by actual mouse clicks correct | `npm run test:e2e` |
 
-웹뷰 렌더 테스트는 확장이 실제로 쓰는 `buildWebviewHtml()` 출력을 **같은 CSP 를 HTTP 헤더로**
-붙여 서빙하고, 클릭은 실제 마우스 이벤트로 합니다 — 상호작용을 우회하는 API 는 쓰지 않습니다.
+The webview render tests serve the very same `buildWebviewHtml()` output the extension uses, **with the same
+CSP applied as an HTTP header**, and clicks are real mouse events — no API that bypasses the interaction.
 
-## 라이선스
+## License
 
-MIT. 서드파티 고지는 [NOTICE](./NOTICE) 참조.
+MIT. See [NOTICE](./NOTICE) for third-party attributions.

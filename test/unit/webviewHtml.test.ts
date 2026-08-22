@@ -11,7 +11,7 @@ const params = {
   assetBaseUri: `${CSP_SOURCE}/media`,
   fileName: 'cube.glb',
   pluginExtension: '.glb' as const,
-  backgroundColor: '',
+  background: 'theme' as const,
   unitSetting: 'auto' as const,
   decimals: 3,
 };

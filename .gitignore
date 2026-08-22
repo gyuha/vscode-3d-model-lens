@@ -11,3 +11,5 @@ test-results/
 !.forge/CONTEXT.md
 !.forge/adr/
 !.forge/retro/
+# 브랜치 루트는 통째로 추적한다 — 커밋되지 않으면 fg-merge 가 main 으로 통합할 수 없다
+!.forge/branch/

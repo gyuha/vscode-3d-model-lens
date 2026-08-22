@@ -1,7 +1,7 @@
 {
   "name": "vscode-3d-model-lens",
   "displayName": "3D Model Lens",
-  "description": "VS Code에서 glTF / GLB / STL 모델을 보고 치수를 측정합니다",
+  "description": "View glTF / GLB / STL models and measure their dimensions inside VS Code",
   "version": "0.0.1",
   "publisher": "gyuha",
   "license": "MIT",
@@ -69,15 +69,25 @@
     "configuration": {
       "title": "3D Model Lens",
       "properties": {
-        "modelLens.backgroundColor": {
+        "modelLens.background": {
           "type": "string",
-          "default": "",
-          "description": "뷰어 배경색(예: #202020). 비워 두면 VS Code 편집기 배경색을 따릅니다."
+          "enum": [
+            "theme",
+            "light",
+            "dark"
+          ],
+          "enumDescriptions": [
+            "Follows the VS Code editor background color.",
+            "Pins a light background (#ffffff).",
+            "Pins a dark background (#1f1f1f)."
+          ],
+          "default": "theme",
+          "markdownDescription": "Viewer background mode. Changing it from the viewer panel saves it here and applies to every open viewer immediately. For why `light` is pure white rather than a light gray, see the measurements in ADR `260822-195326`."
         },
         "modelLens.inspectorOnStart": {
           "type": "boolean",
           "default": false,
-          "description": "모델을 열 때 Babylon Inspector 를 켠 상태로 시작합니다."
+          "description": "Start with the Babylon Inspector open when a model is opened."
         },
         "modelLens.unit": {
           "type": "string",
@@ -89,21 +99,21 @@
             "in"
           ],
           "enumDescriptions": [
-            "포맷에서 유추합니다 — glTF/GLB 는 미터, STL 은 단위 없음(순수 숫자).",
-            "모델 좌표 1 = 1 mm",
-            "모델 좌표 1 = 1 cm",
-            "모델 좌표 1 = 1 m",
-            "모델 좌표 1 = 1 in"
+            "Infer from the format — meters for glTF/GLB, unitless (plain numbers) for STL.",
+            "1 model unit = 1 mm",
+            "1 model unit = 1 cm",
+            "1 model unit = 1 m",
+            "1 model unit = 1 in"
           ],
           "default": "auto",
-          "markdownDescription": "치수·측정에 표시할 단위의 **초기값**입니다. 뷰어 패널에서 파일별로 바꿀 수 있고, 그 선택이 기억됩니다. 단위는 표시 라벨만 바꾸며 기하 변환은 하지 않습니다."
+          "markdownDescription": "**Initial** unit shown for dimensions and measurements. You can change it per file from the viewer panel, and that choice is remembered. The unit only changes the displayed label — no geometry is transformed."
         },
         "modelLens.decimals": {
           "type": "number",
           "default": 3,
           "minimum": 0,
           "maximum": 10,
-          "description": "치수·측정값의 소수점 자릿수입니다."
+          "description": "Number of decimal places for dimensions and measurements."
         }
       }
     },
@@ -115,13 +125,13 @@
     "commands": [
       {
         "command": "modelLens.toggleInspector",
-        "title": "Inspector 켜기/끄기",
+        "title": "Toggle Inspector",
         "category": "3D Model Lens",
         "icon": "$(inspect)"
       },
       {
         "command": "modelLens.toggleMeasureMode",
-        "title": "측정 모드 켜기/끄기",
+        "title": "Toggle Measure Mode",
         "category": "3D Model Lens",
         "icon": "$(gist)"
       }
