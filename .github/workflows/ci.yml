@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    name: 타입 · 린트 · 유닛 · 번들
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+      # 산출물이 새 외부 의존을 끌어오지 않았는지 — AI 없이 돌아가는 게이트
+      - run: npm run build
+      - run: npm run check:bundle
+      - run: npx vsce package --no-dependencies
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vsix
+          path: '*.vsix'
+          if-no-files-found: warn
+
+  e2e:
+    name: 웹뷰 렌더 테스트 (Playwright)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # 헤드리스 Chromium 은 SwiftShader 로 WebGL2 를 돌린다 (playwright.config.ts 의 launch args)
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      # 실패 시 원인을 알 수 있는 아티팩트 (trace · 스크린샷 · HTML 리포트)
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-artifacts
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+  integration:
+    name: 확장 호스트 통합 테스트
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # VS Code 는 Linux 에서 디스플레이가 필요하다
+      - run: xvfb-run -a npm run test:integration
