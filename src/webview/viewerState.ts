@@ -31,6 +31,17 @@ export interface MeasurementState {
   b: Triple;
 }
 
+/**
+ * 재생 상태와 선택한 그룹. 그룹이 없는 파일에서는 `null` 이다.
+ *
+ * 그룹 인덱스는 파일마다 뜻이 다르므로, 복원한 인덱스가 이 파일의 범위를 벗어나면
+ * `AnimationController` 가 `'all'` 로 떨어뜨린다 (animation.ts).
+ */
+export interface AnimationState {
+  playing: boolean;
+  selection: 'all' | number;
+}
+
 export interface TogglesState {
   grid: boolean;
   axes: boolean;
@@ -44,6 +55,7 @@ export interface RestorableViewerState {
   selectedIndex: number | null;
   measureMode: boolean;
   toggles: TogglesState;
+  animation: AnimationState | null;
 }
 
 export interface PersistedViewerState extends RestorableViewerState {
@@ -71,7 +83,29 @@ export function restoreViewerState(raw: unknown): RestorableViewerState | undefi
     selectedIndex: readSelectedIndex(raw.selectedIndex, measurements.length),
     measureMode: raw.measureMode === true,
     toggles: readToggles(raw.toggles),
+    animation: readAnimation(raw.animation),
   };
+}
+
+/**
+ * 애니메이션 상태를 읽는다.
+ *
+ * **버전은 올리지 않았다.** 올리면 버전 불일치로 복원이 통째로 버려져, 이미 열려 있는 탭의
+ * 카메라와 측정까지 사라진다. 필드가 없는 예전 상태는 여기서 `null` 이 되고 나머지는 살아남는다.
+ */
+function readAnimation(raw: unknown): AnimationState | null {
+  if (!isRecord(raw) || typeof raw.playing !== 'boolean') {
+    return null;
+  }
+  const { selection } = raw;
+  if (selection !== 'all' && !isIndex(selection)) {
+    return { playing: raw.playing, selection: 'all' };
+  }
+  return { playing: raw.playing, selection };
+}
+
+function isIndex(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
 }
 
 function readCamera(raw: unknown): CameraState | null {

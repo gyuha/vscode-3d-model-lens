@@ -97,6 +97,24 @@ export async function renderCount(page: Page): Promise<number> {
   );
 }
 
+/**
+ * 렌더 가능한 상태인 메시 수 / 전체 메시 수.
+ *
+ * 빈 화면 회귀의 **근본 원인을 직접 본다**: 머티리얼의 셰이더가 준비되지 않은 메시는
+ * `Mesh.render()` 가 아무것도 그리지 않고 빠져나간다. 유휴에 들어간 시점에 이 둘이 다르면
+ * 사용자는 빈 캔버스를 보고 있다는 뜻이다.
+ */
+export async function readyMeshes(page: Page): Promise<{ ready: number; total: number }> {
+  return page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __modelLens: { readyMeshes: () => { ready: number; total: number } };
+        }
+      ).__modelLens.readyMeshes(),
+  );
+}
+
 export async function isIdle(page: Page): Promise<boolean> {
   return page.evaluate(
     () => (window as unknown as { __modelLens: { isIdle: () => boolean } }).__modelLens.isIdle(),

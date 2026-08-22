@@ -170,7 +170,18 @@ export function buildWebviewHtml(params: WebviewHtmlParams): string {
     border-radius: 2px; font: inherit; padding: 0.0625rem 0.375rem; cursor: pointer;
   }
 
-  #unit-row select {
+  #animation-row { display: flex; align-items: center; gap: 0.5rem; }
+  #animation-row[hidden], #animation-sep[hidden] { display: none; }
+  #animation-row select { flex: 1; min-width: 0; }
+  #animation-row button {
+    background: var(--vscode-button-secondaryBackground, transparent);
+    color: var(--vscode-button-secondaryForeground, inherit);
+    border: 1px solid var(--vscode-editorWidget-border, rgba(128,128,128,0.35));
+    border-radius: 2px; font: inherit; padding: 0.0625rem 0.375rem; cursor: pointer;
+    white-space: nowrap;
+  }
+
+  #unit-row select, #animation-row select {
     background: var(--vscode-dropdown-background);
     color: var(--vscode-dropdown-foreground);
     border: 1px solid var(--vscode-dropdown-border, transparent);
@@ -196,6 +207,13 @@ ${unitOptions}
       </select>
     </div>
 
+    <hr id="animation-sep" hidden />
+
+    <div id="animation-row" hidden>
+      <button type="button" id="animation-toggle">일시정지</button>
+      <select id="animation-select" aria-label="애니메이션"></select>
+    </div>
+
     <hr />
 
     <div id="measure-actions">
@@ -210,6 +228,10 @@ ${unitOptions}
     <label><input type="checkbox" id="toggle-grid" checked /> 그리드</label>
     <label><input type="checkbox" id="toggle-axes" checked /> 축</label>
     <label><input type="checkbox" id="toggle-wireframe" /> 와이어프레임</label>
+
+    <hr />
+
+    <label><input type="checkbox" id="toggle-inspector" /> Inspector</label>
   </div>
 
   <div id="labels"></div>

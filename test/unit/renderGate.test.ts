@@ -67,6 +67,22 @@ describe('RenderGate', () => {
     expect(g.shouldRender()).toBe(false);
   });
 
+  it('setContinuous 를 같은 값으로 반복 호출해도 유휴를 깨지 않는다 — 매 프레임 호출되기 때문이다', () => {
+    const g = gate(0);
+    g.setSceneReady(true);
+    while (g.shouldRender()) {
+      /* 유휴 진입 */
+    }
+    expect(g.shouldRender()).toBe(false);
+
+    // 렌더 루프가 프레임마다 부른다. 값이 안 바뀌었으면 아무 일도 없어야 한다.
+    for (let i = 0; i < 5; i++) {
+      g.setContinuous(false);
+      expect(g.shouldRender(), `프레임 ${i}`).toBe(false);
+    }
+    expect(g.isIdle).toBe(true);
+  });
+
   it('씬이 다시 준비되지 않은 상태로 돌아가면 다시 그린다 — 비동기 리소스가 뒤늦게 도착하는 경우', () => {
     const g = gate(0);
     g.setSceneReady(true);

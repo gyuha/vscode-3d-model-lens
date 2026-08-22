@@ -15,6 +15,7 @@ const sample: RestorableViewerState = {
   selectedIndex: 1,
   measureMode: true,
   toggles: { grid: false, axes: true, wireframe: true, snap: false },
+  animation: { playing: false, selection: 1 },
 };
 
 describe('serializeViewerState / restoreViewerState', () => {
@@ -30,6 +31,47 @@ describe('serializeViewerState / restoreViewerState', () => {
   it('측정 길이는 저장하지 않는다 — 좌표에서 다시 계산한다', () => {
     const raw = JSON.stringify(serializeViewerState(sample));
     expect(raw).not.toMatch(/length/);
+  });
+});
+
+describe('restoreViewerState — 애니메이션', () => {
+  const withAnimation = (animation: unknown): unknown => ({
+    ...serializeViewerState(sample),
+    animation,
+  });
+
+  it('전체 선택을 왕복시킨다', () => {
+    const state: RestorableViewerState = {
+      ...sample,
+      animation: { playing: true, selection: 'all' },
+    };
+    expect(restoreViewerState(JSON.parse(JSON.stringify(serializeViewerState(state))))).toEqual(
+      state,
+    );
+  });
+
+  it('애니메이션 필드가 없는 예전 상태도 나머지를 살려 복원한다 — 버전을 올리지 않았다', () => {
+    const legacy = { ...serializeViewerState(sample) } as unknown as Record<string, unknown>;
+    delete legacy.animation;
+    const restored = restoreViewerState(legacy);
+    expect(restored?.animation).toBeNull();
+    expect(restored?.camera).toEqual(sample.camera);
+    expect(restored?.measurements).toEqual(sample.measurements);
+  });
+
+  it('재생 여부를 알 수 없으면 통째로 버린다 — 이 상태의 핵심이다', () => {
+    for (const bad of [null, 42, 'all', [], { selection: 0 }, { playing: 'yes' }]) {
+      expect(restoreViewerState(withAnimation(bad))?.animation, JSON.stringify(bad)).toBeNull();
+    }
+  });
+
+  it('선택만 이상하면 재생 여부는 살리고 전체로 떨어뜨린다 — 다른 파일에서 온 상태일 수 있다', () => {
+    for (const bad of [-1, 1.5, Number.NaN, '0', undefined]) {
+      expect(
+        restoreViewerState(withAnimation({ playing: true, selection: bad }))?.animation,
+        String(bad),
+      ).toEqual({ playing: true, selection: 'all' });
+    }
   });
 });
 

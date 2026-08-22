@@ -5,6 +5,7 @@ import {
   collectExternalRequests,
   extents,
   isIdle,
+  readyMeshes,
   renderCount,
   sendHostMessage,
   vertexTargets,
@@ -449,5 +450,134 @@ test.describe('탭 전환 시 상태 보존', () => {
     await expect(page.locator('#measure-list .row')).toHaveCount(0);
     await expect(page.locator('#dim-x')).toHaveText('10.000');
     expect(problems.filter((p) => p.startsWith('pageerror'))).toEqual([]);
+  });
+});
+
+test.describe('유휴 진입 — 빈 화면 회귀', () => {
+  test('입력 없이 유휴에 들어가도 모든 메시가 렌더 가능한 상태다', async ({ page }) => {
+    // 사용자가 캔버스를 한 번도 건드리지 않는 상황. 게이트가 셰이더 컴파일이 끝나기 전에
+    // 유휴로 잠기면 화면은 비어 있는데 뷰어는 "다 됐다"고 믿는다.
+    await page.goto('/?fixture=cube.glb');
+    expect(await waitForViewer(page)).toBe('ready');
+    expect(await waitForIdle(page)).toBe(true);
+
+    const { ready, total } = await readyMeshes(page);
+    expect(total).toBeGreaterThan(0);
+    expect(ready, '유휴인데 렌더되지 않는 메시가 남아 있다 — 빈 화면이다').toBe(total);
+  });
+});
+
+test.describe('애니메이션', () => {
+  test('애니메이션이 있으면 입력 없이도 계속 그린다', async ({ page }) => {
+    await page.goto('/?fixture=animated.glb');
+    expect(await waitForViewer(page)).toBe('ready');
+    await expect(page.locator('#root')).toHaveAttribute('data-animation', 'playing');
+
+    const before = await renderCount(page);
+    await page.waitForTimeout(600);
+    const after = await renderCount(page);
+
+    expect(after, '재생 중인데 렌더가 멈췄다 — 애니메이션이 얼어붙는다').toBeGreaterThan(before);
+    expect(await isIdle(page)).toBe(false);
+  });
+
+  test('일시정지하면 유휴로 들어간다', async ({ page }) => {
+    await page.goto('/?fixture=animated.glb');
+    expect(await waitForViewer(page)).toBe('ready');
+
+    await page.locator('#animation-toggle').click();
+
+    await expect(page.locator('#root')).toHaveAttribute('data-animation', 'paused');
+    expect(await waitForIdle(page)).toBe(true);
+  });
+
+  test('측정 모드를 켜면 애니메이션이 멈춘다 — 움직이는 메시에서는 측정이 의미를 잃는다', async ({
+    page,
+  }) => {
+    await page.goto('/?fixture=animated.glb');
+    expect(await waitForViewer(page)).toBe('ready');
+    await expect(page.locator('#root')).toHaveAttribute('data-animation', 'playing');
+
+    await sendHostMessage(page, { type: 'setMeasureMode', active: true });
+
+    await expect(page.locator('#root')).toHaveAttribute('data-measure', 'on');
+    await expect(page.locator('#root')).toHaveAttribute('data-animation', 'paused');
+  });
+
+  test('전체 재생에서 개별 그룹으로 좁힐 수 있다', async ({ page }) => {
+    await page.goto('/?fixture=animated.glb');
+    expect(await waitForViewer(page)).toBe('ready');
+
+    const select = page.locator('#animation-select');
+    await expect(select).toHaveValue('all');
+    // '전체' 다음에 파일의 그룹이 순서대로 온다.
+    await expect(select.locator('option')).toHaveText(['전체', 'rise', 'slide']);
+
+    await select.selectOption('1');
+
+    await expect(select).toHaveValue('1');
+    // 개별 그룹도 재생 중이므로 계속 그려야 한다.
+    await expect(page.locator('#root')).toHaveAttribute('data-animation', 'playing');
+  });
+
+  test('reload 후 재생 상태와 선택한 그룹이 복원된다', async ({ page }) => {
+    await page.goto('/?fixture=animated.glb');
+    expect(await waitForViewer(page)).toBe('ready');
+
+    await page.locator('#animation-select').selectOption('1');
+    await page.locator('#animation-toggle').click();
+    await expect(page.locator('#root')).toHaveAttribute('data-animation', 'paused');
+    // 저장은 렌더 뒤에 디바운스되므로 유휴에 들어갈 때까지 기다린다.
+    expect(await waitForIdle(page)).toBe(true);
+
+    await page.reload();
+    expect(await waitForViewer(page)).toBe('ready');
+
+    await expect(page.locator('#root')).toHaveAttribute('data-restored', 'yes');
+    await expect(page.locator('#root')).toHaveAttribute('data-animation', 'paused');
+    await expect(page.locator('#animation-select')).toHaveValue('1');
+  });
+
+  test('애니메이션이 없는 파일에서는 섹션을 숨긴다', async ({ page }) => {
+    await page.goto('/?fixture=cube.glb');
+    expect(await waitForViewer(page)).toBe('ready');
+
+    await expect(page.locator('#root')).toHaveAttribute('data-animation', 'none');
+    await expect(page.locator('#animation-row')).toBeHidden();
+  });
+});
+
+test.describe('Inspector 패널 토글', () => {
+  // 끄는 것은 여기서 시험하지 않는다. Inspector 사이드바가 오른쪽 패널을 완전히 덮어
+  // 체크박스를 다시 클릭할 수 없기 때문이다 — 받아들인 한계이며, 끄는 경로는 제목 표시줄
+  // 아이콘(아래 테스트의 setInspector 메시지)이다.
+  test('패널 체크박스로 Inspector 를 켤 수 있다', async ({ page }) => {
+    await page.goto('/?fixture=cube.glb');
+    expect(await waitForViewer(page)).toBe('ready');
+
+    const checkbox = page.locator('#toggle-inspector');
+    await expect(checkbox).not.toBeChecked();
+
+    await checkbox.check();
+
+    await expect(page.locator('#root')).toHaveAttribute('data-inspector', 'on');
+    await expect(page.locator('[class*="fui-"]').first()).toBeVisible();
+  });
+
+  test('제목 표시줄 경로로 켜도 체크박스가 따라온다 — 두 진입점이 어긋나면 토글 방향이 뒤집힌다', async ({
+    page,
+  }) => {
+    await page.goto('/?fixture=cube.glb');
+    expect(await waitForViewer(page)).toBe('ready');
+
+    await sendHostMessage(page, { type: 'setInspector', visible: true });
+
+    await expect(page.locator('#root')).toHaveAttribute('data-inspector', 'on');
+    await expect(page.locator('#toggle-inspector')).toBeChecked();
+
+    await sendHostMessage(page, { type: 'setInspector', visible: false });
+
+    await expect(page.locator('#root')).toHaveAttribute('data-inspector', 'off');
+    await expect(page.locator('#toggle-inspector')).not.toBeChecked();
   });
 });

@@ -72,18 +72,14 @@ function gltfJson(geo, bin, bufferSpec) {
   writeFileSync(join(OUT, 'cube.gltf'), JSON.stringify(json, null, 2) + '\n');
 }
 
-// --- cube.glb (바이너리 컨테이너)
-{
-  const geo = box(5, 6, 7);
-  const bin = binaryFor(geo);
-  const json = gltfJson(geo, bin, { byteLength: bin.buffer.length });
-
+/** JSON + BIN 두 청크를 담은 GLB 컨테이너로 묶어 쓴다. */
+function writeGlb(name, json, binBuffer) {
   const pad = (buf, filler) => {
     const rem = buf.length % 4;
     return rem === 0 ? buf : Buffer.concat([buf, Buffer.alloc(4 - rem, filler)]);
   };
   const jsonChunk = pad(Buffer.from(JSON.stringify(json), 'utf8'), 0x20); // 공백으로 패딩
-  const binChunk = pad(bin.buffer, 0x00);
+  const binChunk = pad(binBuffer, 0x00);
 
   const header = Buffer.alloc(12);
   header.write('glTF', 0, 'ascii');
@@ -96,9 +92,82 @@ function gltfJson(geo, bin, bufferSpec) {
     head.write(type, 4, 'ascii');
     return Buffer.concat([head, data]);
   };
-  writeFileSync(
-    join(OUT, 'cube.glb'),
-    Buffer.concat([header, chunk(jsonChunk, 'JSON'), chunk(binChunk, 'BIN\0')]),
+  writeFileSync(join(OUT, name), Buffer.concat([header, chunk(jsonChunk, 'JSON'), chunk(binChunk, 'BIN\0')]));
+}
+
+// --- cube.glb (바이너리 컨테이너)
+{
+  const geo = box(5, 6, 7);
+  const bin = binaryFor(geo);
+  writeGlb('cube.glb', gltfJson(geo, bin, { byteLength: bin.buffer.length }), bin.buffer);
+}
+
+// --- animated.glb — 애니메이션 그룹 2개. 재생/정지와 "전체 vs 개별" 선택 검증용.
+//
+// 노드 두 개가 같은 큐브 메시를 참조하고 각각 다른 translation 애니메이션을 갖는다.
+// 그룹이 하나면 "전체"와 "개별"이 구분되지 않아 선택 UI 를 검증할 수 없다.
+{
+  const geo = box(2, 2, 2);
+  const bin = binaryFor(geo);
+
+  const floats = (values) => {
+    const buf = Buffer.alloc(values.length * 4);
+    values.forEach((v, i) => buf.writeFloatLE(v, i * 4));
+    return buf;
+  };
+  const times = floats([0, 1]);
+  const rise = floats([-2, 0, 0, -2, 3, 0]);
+  const slide = floats([2, 0, 0, 5, 0, 0]);
+  const buffer = Buffer.concat([bin.buffer, times, rise, slide]);
+
+  // bufferView 오프셋은 4의 배수여야 한다 — 위 세 블록이 모두 float 이라 자연히 맞는다.
+  const timesAt = bin.buffer.length;
+  const riseAt = timesAt + times.length;
+  const slideAt = riseAt + rise.length;
+
+  const animation = (name, node, output) => ({
+    name,
+    samplers: [{ input: 2, output, interpolation: 'LINEAR' }],
+    channels: [{ sampler: 0, target: { node, path: 'translation' } }],
+  });
+
+  writeGlb(
+    'animated.glb',
+    {
+      asset: { version: '2.0', generator: '3d-model-lens fixture generator' },
+      scene: 0,
+      scenes: [{ nodes: [0, 1] }],
+      nodes: [
+        { mesh: 0, name: 'Riser', translation: [-2, 0, 0] },
+        { mesh: 0, name: 'Slider', translation: [2, 0, 0] },
+      ],
+      meshes: [{ name: 'FixtureBox', primitives: [{ attributes: { POSITION: 0 }, indices: 1 }] }],
+      buffers: [{ byteLength: buffer.length }],
+      bufferViews: [
+        { buffer: 0, byteOffset: 0, byteLength: bin.pos.length, target: 34962 },
+        { buffer: 0, byteOffset: bin.pos.length, byteLength: bin.idx.length, target: 34963 },
+        { buffer: 0, byteOffset: timesAt, byteLength: times.length },
+        { buffer: 0, byteOffset: riseAt, byteLength: rise.length },
+        { buffer: 0, byteOffset: slideAt, byteLength: slide.length },
+      ],
+      accessors: [
+        {
+          bufferView: 0,
+          componentType: 5126,
+          count: geo.positions.length,
+          type: 'VEC3',
+          min: geo.min,
+          max: geo.max,
+        },
+        { bufferView: 1, componentType: 5123, count: geo.indices.length, type: 'SCALAR' },
+        // 샘플러 input 은 min/max 가 필수다 — 없으면 glTF 검증기가 거부한다.
+        { bufferView: 2, componentType: 5126, count: 2, type: 'SCALAR', min: [0], max: [1] },
+        { bufferView: 3, componentType: 5126, count: 2, type: 'VEC3' },
+        { bufferView: 4, componentType: 5126, count: 2, type: 'VEC3' },
+      ],
+      animations: [animation('rise', 0, 3), animation('slide', 1, 4)],
+    },
+    buffer,
   );
 }
 

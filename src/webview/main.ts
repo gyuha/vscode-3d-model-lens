@@ -78,6 +78,7 @@ async function boot(): Promise<void> {
     const sizes = extentSizes(viewer.extents);
     wireUnits(sizes, viewer.measure);
     wireMeasurePanel(viewer.measure, viewer);
+    wireAnimationPanel(viewer);
 
     root.dataset.state = 'ready';
     root.dataset.meshCount = String(viewer.meshes.length);
@@ -85,6 +86,14 @@ async function boot(): Promise<void> {
     root.dataset.inspector = 'off';
 
     if (restored) {
+      if (restored.animation && viewer.animations.available) {
+        viewer.animations.select(restored.animation.selection);
+        if (restored.animation.playing) {
+          viewer.animations.play();
+        } else {
+          viewer.animations.pause();
+        }
+      }
       viewer.measure.restore(
         restored.measurements.map((m) => ({
           a: { x: m.a[0], y: m.a[1], z: m.a[2] },
@@ -92,8 +101,7 @@ async function boot(): Promise<void> {
         })),
         restored.selectedIndex,
       );
-      viewer.measure.setActive(restored.measureMode);
-      viewer.markDirty();
+      viewer.setMeasureMode(restored.measureMode);
     }
     root.dataset.restored = restored ? 'yes' : 'no';
 
@@ -120,6 +128,11 @@ function wirePanel(chrome: Chrome, viewer: Viewer): void {
   bindCheckbox('toggle-wireframe', (on) => {
     chrome.setWireframe(on);
     viewer.markDirty();
+  });
+
+  // Inspector 는 꺼진 채로 시작하므로 `bindCheckbox` 의 초기 apply 를 쓰지 않는다.
+  requireElement<HTMLInputElement>('toggle-inspector').addEventListener('change', (event) => {
+    applyInspector(viewer, (event.target as HTMLInputElement).checked);
   });
 }
 
@@ -183,6 +196,9 @@ function wireStatePersistence(viewer: Viewer): void {
     })),
     selectedIndex: viewer.measure.selectedIndex,
     measureMode: viewer.measure.isActive,
+    animation: viewer.animations.available
+      ? { playing: viewer.animations.isPlaying, selection: viewer.animations.selection }
+      : null,
     toggles: {
       grid: isChecked('toggle-grid'),
       axes: isChecked('toggle-axes'),
@@ -250,6 +266,8 @@ function exposeTestSeam(viewer: Viewer): void {
     // 유휴 렌더 중단을 검증하는 관측점. 렌더를 유발하는 API 는 노출하지 않는다.
     renderCount: () => viewer.renderCount(),
     isIdle: () => viewer.isIdle(),
+    // 빈 화면 회귀의 관측점 — 유휴인데 렌더되지 않는 메시가 남아 있으면 화면이 비어 있다.
+    readyMeshes: () => viewer.readyMeshes(),
   };
 }
 
@@ -298,35 +316,101 @@ function wireMeasurePanel(measure: MeasurementTool, viewer: Viewer): void {
   measure.onChange();
 }
 
+/**
+ * 애니메이션 재생 컨트롤.
+ *
+ * 그룹 이름은 파일에서 오므로 항목을 런타임에 채운다. 그룹이 없는 파일(STL, 정적 glTF)에서는
+ * 섹션 자체를 숨긴 채로 둔다.
+ */
+function wireAnimationPanel(viewer: Viewer): void {
+  const row = requireElement<HTMLDivElement>('animation-row');
+  const separator = requireElement<HTMLHRElement>('animation-sep');
+  const toggle = requireElement<HTMLButtonElement>('animation-toggle');
+  const select = requireElement<HTMLSelectElement>('animation-select');
+  const { animations } = viewer;
+
+  if (!animations.available) {
+    root.dataset.animation = 'none';
+    return;
+  }
+
+  select.replaceChildren(
+    ...['전체', ...animations.names].map((label, index) => {
+      const option = document.createElement('option');
+      // 첫 항목이 '전체'이므로 그룹 인덱스는 하나씩 밀린다.
+      option.value = index === 0 ? 'all' : String(index - 1);
+      option.textContent = label;
+      return option;
+    }),
+  );
+
+  toggle.addEventListener('click', () =>
+    animations.isPlaying ? animations.pause() : animations.play(),
+  );
+  select.addEventListener('change', () =>
+    animations.select(select.value === 'all' ? 'all' : Number(select.value)),
+  );
+
+  animations.onChange = (): void => {
+    toggle.textContent = animations.isPlaying ? '일시정지' : '재생';
+    select.value = animations.selection === 'all' ? 'all' : String(animations.selection);
+    root.dataset.animation = animations.isPlaying ? 'playing' : 'paused';
+    // 일시정지 직후의 정리 렌더. 재생 중에는 렌더 루프가 알아서 계속 그린다.
+    viewer.markDirty();
+  };
+  animations.onChange();
+
+  row.hidden = false;
+  separator.hidden = false;
+}
+
 /** 확장 호스트의 명령(제목 표시줄 아이콘 · 명령 팔레트)을 받는다. */
 function wireHostMessages(viewer: Viewer): void {
   window.addEventListener('message', (event: MessageEvent<HostToWebview>) => {
     const message = event.data;
     if (message?.type === 'setMeasureMode') {
-      viewer.measure.setActive(message.active);
-      viewer.markDirty();
+      viewer.setMeasureMode(message.active);
       post({ type: 'measureModeState', active: message.active });
       return;
     }
     if (message?.type !== 'setInspector') {
       return;
     }
-    // Inspector 는 fps 카운터와 기즈모가 렌더 루프에 의존하므로, 켜진 동안은
-    // 유휴 판정을 끄고 연속으로 그린다. 켜지 않으면 0 fps 로 보여 고장난 것처럼 된다.
-    viewer.setContinuousRendering(message.visible);
-    void viewer
-      .setInspector(message.visible)
-      .then(() => {
-        root.dataset.inspector = message.visible ? 'on' : 'off';
-        post({ type: 'inspectorState', visible: message.visible });
-      })
-      .catch((error: unknown) => {
-        root.dataset.inspector = 'off';
-        viewer.setContinuousRendering(false);
-        post({ type: 'inspectorFailed', message: describeError(error) });
-        console.error('[3D Model Lens] Inspector 실패', error);
-      });
+    applyInspector(viewer, message.visible);
   });
+}
+
+/**
+ * Inspector 를 켜고 끈다 — 제목 표시줄 아이콘과 패널 체크박스의 **공통 경로**.
+ *
+ * 둘로 나뉘면 한쪽으로 켠 상태를 다른 쪽이 모른다. 특히 호스트는 `inspectorState` 로만
+ * 현재 상태를 아는데, 그게 어긋나면 다음 아이콘 클릭의 토글 방향이 뒤집힌다.
+ */
+function applyInspector(viewer: Viewer, visible: boolean): void {
+  const checkbox = requireElement<HTMLInputElement>('toggle-inspector');
+  checkbox.checked = visible;
+  // chunk 가 수 MB 라 켜는 데 시간이 걸린다. 그동안 중복 클릭을 막는다.
+  checkbox.disabled = true;
+
+  // Inspector 는 fps 카운터와 기즈모가 렌더 루프에 의존하므로, 켜진 동안은
+  // 유휴 판정을 끄고 연속으로 그린다. 켜지 않으면 0 fps 로 보여 고장난 것처럼 된다.
+  viewer.setContinuousRendering(visible);
+  void viewer
+    .setInspector(visible)
+    .then(() => {
+      root.dataset.inspector = visible ? 'on' : 'off';
+      post({ type: 'inspectorState', visible });
+    })
+    .catch((error: unknown) => {
+      root.dataset.inspector = 'off';
+      checkbox.checked = false;
+      viewer.setContinuousRendering(false);
+      post({ type: 'inspectorFailed', message: describeError(error) });
+      console.error('[3D Model Lens] Inspector 실패', error);
+    })
+    .finally(() => {
+      checkbox.disabled = false;
+    });
 }
 
 function bindCheckbox(id: string, apply: (on: boolean) => void): void {

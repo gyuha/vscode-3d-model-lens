@@ -14,6 +14,7 @@ import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh.js';
 import type { SupportedExtension } from '../formats.js';
 import { resolveUnit, type UnitSetting } from '../units.js';
 import type { CameraState } from './viewerState.js';
+import { createAnimationController, type AnimationController } from './animation.js';
 import { Chrome, ensureMaterials } from './chrome.js';
 import { computeExtents, extentDiagonal, type Extents } from './geometry.js';
 import { MeasurementTool } from './measurement.js';
@@ -38,6 +39,14 @@ export interface Viewer {
   scene: Scene;
   chrome: Chrome;
   measure: MeasurementTool;
+  animations: AnimationController;
+  /**
+   * 측정 모드를 바꾼다. 켜면 애니메이션을 멈춘다 — 메시가 움직이는 동안 찍은 두 점은
+   * 서로 다른 시점의 위치라 길이가 의미를 잃는다. 끌 때 자동으로 재개하지는 않는다.
+   */
+  setMeasureMode: (active: boolean) => void;
+  /** 렌더 가능한 메시 수 / 전체 — 빈 화면 회귀를 잡는 관측점. */
+  readyMeshes: () => { ready: number; total: number };
   /** 무언가 바뀌었으니 다시 그려야 한다고 알린다. */
   markDirty: () => void;
   /** Inspector 처럼 연속 렌더링이 필요한 동안 켠다. */
@@ -116,6 +125,8 @@ export async function createViewer(
     config.decimals,
   );
 
+  const animations = createAnimationController(container.animationGroups);
+
   // 유휴 상태에서는 프레임을 그리지 않는다. 렌더 루프 자체는 멈추지 않는다 —
   // 그 이유는 renderGate.ts 주석 참조.
   const gate = new RenderGate();
@@ -159,10 +170,19 @@ export async function createViewer(
   camera.onViewMatrixChangedObservable.add(() => gate.markDirty());
   camera.onProjectionMatrixChangedObservable.add(() => gate.markDirty());
 
+  // continuous 를 원하는 소스가 둘이다. 렌더 루프가 매 프레임 게이트를 갱신하므로
+  // 여기서 OR 로 합치지 않으면 애니메이션이 Inspector 의 설정을 덮어쓴다.
+  let inspectorContinuous = false;
+
   engine.runRenderLoop(() => {
-    // 대기 중인 리소스(텍스처·IBL)가 있으면 아직 준비되지 않은 것으로 본다.
-    // `_pendingData.length` 를 보는 O(1) 조회라 매 프레임 불러도 무해하다.
-    gate.setSceneReady(scene.getWaitingItemsCount() === 0);
+    // `getWaitingItemsCount()` 로는 부족하다 — 그건 `_pendingData`(파일·텍스처 로딩)만 세고
+    // **셰이더 컴파일은 세지 않는다**. 머티리얼이 준비되지 않은 메시는 `Mesh.render()` 가
+    // 아무것도 그리지 않고 빠져나가므로, 그 상태로 유휴에 들어가면 빈 화면에서 얼어붙는다.
+    // `scene.isReady()` 는 머티리얼·렌더타깃까지 확인하고, 준비되지 않은 머티리얼을 만나도
+    // 멈추지 않고 전부 순회해 병렬 컴파일을 시작시킨다.
+    gate.setSceneReady(scene.isReady());
+    // 재생 중인 애니메이션은 `scene.render()` 안에서만 진행된다 — 그리지 않으면 얼어붙는다.
+    gate.setContinuous(inspectorContinuous || animations.isPlaying);
     if (gate.shouldRender()) {
       scene.render();
     }
@@ -178,6 +198,18 @@ export async function createViewer(
     scene,
     chrome,
     measure,
+    animations,
+    setMeasureMode: (active) => {
+      measure.setActive(active);
+      if (active) {
+        animations.pause();
+      }
+      gate.markDirty();
+    },
+    readyMeshes: () => ({
+      ready: meshes.filter((mesh) => mesh.isReady(true)).length,
+      total: meshes.length,
+    }),
     extents,
     meshes,
     resetView: () => {
@@ -185,7 +217,9 @@ export async function createViewer(
       gate.markDirty();
     },
     markDirty: () => gate.markDirty(),
-    setContinuousRendering: (on) => gate.setContinuous(on),
+    setContinuousRendering: (on) => {
+      inspectorContinuous = on;
+    },
     renderCount: () => renderCount,
     isIdle: () => gate.isIdle,
     cameraState: () => ({

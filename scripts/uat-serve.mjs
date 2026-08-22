@@ -138,7 +138,7 @@ createServer((req, res) => {
   res.end(html);
 }).listen(PORT, '127.0.0.1', () => {
   console.log(`UAT 서버: http://127.0.0.1:${PORT}/?fixture=cube.glb&theme=dark`);
-  console.log(`  픽스처: cube.gltf · cube.glb · cube.stl · broken.glb`);
+  console.log(`  픽스처: cube.gltf · cube.glb · cube.stl · animated.glb · broken.glb`);
   console.log(`  테마:   dark · light`);
   console.log(`  단위:   ?unit=auto|mm|cm|m|in   자릿수: ?decimals=0..10`);
 });

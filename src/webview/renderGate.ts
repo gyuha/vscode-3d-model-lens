@@ -32,8 +32,16 @@ export class RenderGate {
     this.dirty = true;
   }
 
-  /** Inspector 가 켜진 동안 켠다 — fps 카운터와 기즈모가 렌더 루프에 의존한다. */
+  /**
+   * 연속 렌더가 필요한 동안 켠다 — Inspector 의 fps 카운터·기즈모, 재생 중인 애니메이션.
+   *
+   * 렌더 루프가 프레임마다 부르므로 **값이 바뀔 때만** 반응한다. 매번 dirty 를 세우면
+   * 해제 상태에서 영원히 유휴에 못 들어간다.
+   */
   public setContinuous(continuous: boolean): void {
+    if (continuous === this.continuous) {
+      return;
+    }
     this.continuous = continuous;
     if (!continuous) {
       // 해제 직후에는 한 번 정리 렌더를 준다.
