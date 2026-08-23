@@ -18,3 +18,5 @@ eslint.config.mjs
 .prettierrc
 .gitignore
 esbuild.mjs
+images/icon-1024.png
+images/screen-*.png
