@@ -2,7 +2,7 @@ import * as assert from 'node:assert/strict';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 
-const EXTENSION_ID = 'gyuha.vscode-3d-model-lens';
+const EXTENSION_ID = 'nicegyuha.vscode-3d-model-lens';
 const VIEW_TYPE = 'modelLens.viewer';
 const FIXTURES = path.join(__dirname, '..', '..', '..', 'test', 'fixtures');
 

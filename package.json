@@ -4,7 +4,7 @@
   "description": "View glTF / GLB / STL models and measure their dimensions inside VS Code",
   "icon": "images/icon.png",
   "version": "0.1.0",
-  "publisher": "gyuha",
+  "publisher": "nicegyuha",
   "license": "MIT",
   "repository": {
     "type": "git",
