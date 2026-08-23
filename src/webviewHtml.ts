@@ -162,7 +162,7 @@ export function buildWebviewHtml(params: WebviewHtmlParams): string {
 
   #measure-list { display: flex; flex-direction: column; gap: 0.125rem; max-height: 11rem; overflow-y: auto; }
   #measure-list:empty::after {
-    content: 'Turn on measure mode and pick two points';
+    content: 'No measurements';
     color: var(--vscode-descriptionForeground); font-style: italic;
   }
   #measure-list .row { display: flex; align-items: center; gap: 0.375rem; }
@@ -233,11 +233,12 @@ ${unitOptions}
 
     <hr />
 
+    <label><input type="checkbox" id="toggle-measure" /> Measure</label>
+    <label><input type="checkbox" id="toggle-snap" checked /> Vertex snap</label>
     <div id="measure-actions">
-      <span class="state" id="measure-state">Measure off</span>
+      <span class="state" id="measure-state"></span>
       <button type="button" id="measure-clear">Clear all</button>
     </div>
-    <label><input type="checkbox" id="toggle-snap" checked /> Vertex snap</label>
     <div id="measure-list"></div>
 
     <hr />

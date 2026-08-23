@@ -109,7 +109,7 @@ async function boot(): Promise<void> {
         })),
         restored.selectedIndex,
       );
-      viewer.setMeasureMode(restored.measureMode);
+      applyMeasureMode(viewer, restored.measureMode);
     }
     root.dataset.restored = restored ? 'yes' : 'no';
 
@@ -133,6 +133,12 @@ function wirePanel(chrome: Chrome, viewer: Viewer): void {
   // `gridChanged` 가 나가 전역 설정을 다시 쓴다. 사용자의 조작(`change`)에만 반응해야 한다.
   requireElement<HTMLInputElement>('toggle-grid').addEventListener('change', (event) => {
     post({ type: 'gridChanged', grid: (event.target as HTMLInputElement).checked });
+  });
+
+  // 측정 모드도 같은 이유로 맨 `change` 리스너다 — `bindCheckbox` 의 초기 apply 에 태우면
+  // 뷰어를 열 때마다 `measureModeState` 가 나간다.
+  requireElement<HTMLInputElement>('toggle-measure').addEventListener('change', (event) => {
+    applyMeasureMode(viewer, (event.target as HTMLInputElement).checked);
   });
 
   // Inspector 는 꺼진 채로 시작하므로 `bindCheckbox` 의 초기 apply 를 쓰지 않는다.
@@ -285,7 +291,8 @@ function wireMeasurePanel(measure: MeasurementTool, viewer: Viewer): void {
   measure.onChange = (): void => {
     // 측정이 추가·삭제·선택되면 선·마커가 바뀌므로 다시 그린다.
     viewer.markDirty();
-    state.textContent = measure.isActive ? 'Measure on — pick two points' : 'Measure off';
+    // 켜짐 여부는 체크박스가 말하므로 여기는 힌트만 남긴다 — 꺼져 있을 때는 할 말이 없다.
+    state.textContent = measure.isActive ? 'pick two points' : '';
     root.dataset.measure = measure.isActive ? 'on' : 'off';
     root.dataset.measureCount = String(measure.list.length);
 
@@ -403,8 +410,7 @@ function wireHostMessages(viewer: Viewer): void {
       return;
     }
     if (message?.type === 'setMeasureMode') {
-      viewer.setMeasureMode(message.active);
-      post({ type: 'measureModeState', active: message.active });
+      applyMeasureMode(viewer, message.active);
       return;
     }
     if (message?.type !== 'setInspector') {
@@ -412,6 +418,25 @@ function wireHostMessages(viewer: Viewer): void {
     }
     applyInspector(viewer, message.visible);
   });
+}
+
+/**
+ * 측정 모드를 켜고 끈다 — 제목 표시줄 아이콘 · 패널 체크박스 · 탭 복원의 **공통 경로**.
+ *
+ * `applyInspector` 와 같은 이유로 하나로 모은다. 호스트는 `measureModeState` 로만 현재 상태를
+ * 아는데, 그게 어긋나면 다음 아이콘 클릭의 토글 방향이 뒤집힌다. **특히 복원 경로가 알리지
+ * 않으면** 세션은 `measureActive: false` 로 시작하므로, 측정 모드를 켠 채 탭을 떠났다 돌아오면
+ * 아이콘이 한 번 먹히지 않는다.
+ *
+ * 새 메시지 타입을 만들지 않는 이유: 호스트가 하는 일이 `session.measureActive` 갱신 하나로
+ * 동일하다. `gridChanged` 계열이 별도 타입인 것은 호스트가 `config.update` 라는 다른 일을
+ * 하기 때문이다.
+ */
+function applyMeasureMode(viewer: Viewer, active: boolean): void {
+  setChecked('toggle-measure', active);
+  // 켤 때의 애니메이션 정지와 재렌더는 `viewer.setMeasureMode` 안에서 일어난다.
+  viewer.setMeasureMode(active);
+  post({ type: 'measureModeState', active });
 }
 
 /**

@@ -86,6 +86,18 @@ describe('buildWebviewHtml', () => {
     expect(html).not.toMatch(/가로|높이|깊이|width.*height.*depth/i);
   });
 
+  it('측정 모드 체크박스가 있고 checked 가 붙어 있지 않다 — 측정은 항상 꺼진 채 시작한다', () => {
+    expect(html).toContain('id="toggle-measure"');
+    const checkbox = /<input type="checkbox" id="toggle-measure"([^>]*)>/.exec(html);
+    expect(checkbox).not.toBeNull();
+    expect(checkbox?.[1]).not.toContain('checked');
+  });
+
+  it('빈 측정 목록 플레이스홀더는 사실만 말한다 — 이미 켠 사람에게 켜라고 하지 않는다', () => {
+    expect(html).toContain('No measurements');
+    expect(html).not.toContain('Turn on measure mode');
+  });
+
   it('단위 드롭다운이 units.ts 의 목록을 그대로 낸다', () => {
     for (const unit of ['auto', 'mm', 'cm', 'm', 'in']) {
       expect(html).toContain(`value="${unit}"`);

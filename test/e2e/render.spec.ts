@@ -698,3 +698,66 @@ test.describe('그리드 설정', () => {
     ).toBeGreaterThan(idleCount);
   });
 });
+
+test.describe('측정 모드 패널 토글', () => {
+  test('패널 체크박스로 측정 모드를 켤 수 있고 호스트에 알린다', async ({ page }) => {
+    await page.goto('/?fixture=cube.glb');
+    expect(await waitForViewer(page)).toBe('ready');
+    await expect(page.locator('#toggle-measure')).not.toBeChecked();
+    const messages = await collectHostMessages(page);
+
+    await page.locator('#toggle-measure').check();
+
+    await expect(page.locator('#root')).toHaveAttribute('data-measure', 'on');
+    expect(await messages()).toContainEqual({ type: 'measureModeState', active: true });
+  });
+
+  test('제목 표시줄 경로로 켜도 체크박스가 따라온다 — 두 진입점이 어긋나면 토글 방향이 뒤집힌다', async ({
+    page,
+  }) => {
+    await page.goto('/?fixture=cube.glb');
+    expect(await waitForViewer(page)).toBe('ready');
+
+    await sendHostMessage(page, { type: 'setMeasureMode', active: true });
+
+    await expect(page.locator('#root')).toHaveAttribute('data-measure', 'on');
+    await expect(page.locator('#toggle-measure')).toBeChecked();
+
+    await sendHostMessage(page, { type: 'setMeasureMode', active: false });
+
+    await expect(page.locator('#root')).toHaveAttribute('data-measure', 'off');
+    await expect(page.locator('#toggle-measure')).not.toBeChecked();
+  });
+
+  test('복원 시 체크박스가 따라오고 호스트에 다시 알린다 — 알리지 않으면 다음 아이콘 클릭이 먹히지 않는다', async ({
+    page,
+  }) => {
+    await page.goto('/?fixture=cube.glb');
+    expect(await waitForViewer(page)).toBe('ready');
+    await page.locator('#toggle-measure').check();
+    await expect(page.locator('#root')).toHaveAttribute('data-measure', 'on');
+
+    // 복원 통보는 로드 중에 일어나므로 싱크를 문서 생성 전에 심어야 한다 —
+    // collectHostMessages 는 로드 후에 붙으므로 이 경로를 볼 수 없다.
+    await page.addInitScript(() => {
+      const sink: unknown[] = [];
+      (window as unknown as { __hostMessages: unknown[] }).__hostMessages = sink;
+      window.addEventListener('uat:tohost', (event) =>
+        sink.push((event as CustomEvent).detail),
+      );
+    });
+
+    await page.reload();
+    expect(await waitForViewer(page)).toBe('ready');
+    await expect(page.locator('#root')).toHaveAttribute('data-restored', 'yes');
+
+    await expect(page.locator('#root')).toHaveAttribute('data-measure', 'on');
+    await expect(page.locator('#toggle-measure')).toBeChecked();
+    expect(
+      await page.evaluate(
+        () => (window as unknown as { __hostMessages: unknown[] }).__hostMessages,
+      ),
+      '복원이 호스트에 알리지 않으면 session.measureActive 가 false 로 남아 아이콘이 한 번 먹히지 않는다',
+    ).toContainEqual({ type: 'measureModeState', active: true });
+  });
+});
