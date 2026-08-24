@@ -5,6 +5,23 @@ All notable changes to the **3D Model Lens** extension are documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-08-25
+
+### Changed
+
+- **Balanced right-drag sensitivity** — reduced the zoom-independent panning speed to half of its
+  initial calibrated value for finer camera positioning while preserving consistent movement at every
+  zoom level.
+
+## [0.1.1] - 2026-08-25
+
+### Fixed
+
+- **Camera navigation at every zoom level** — right-drag panning now scales with the camera radius, so
+  the model moves smoothly and consistently whether it is zoomed in, zoomed out, large or small.
+- **Continuous vertical orbit** — tilting no longer stops at Babylon's default top and bottom polar
+  limits, and horizontal orbit remains available after crossing a pole.
+
 ## [0.1.0] - 2026-08-23
 
 First release.
@@ -70,4 +87,6 @@ These are decisions, not gaps. Each is explained in the README.
   Z-up, Babylon is Y-up), but then the file says `Z=30` while the viewer shows `Y=30`. In a measurement
   tool that is a lie, so Z-up CAD files may appear to lie on their side.
 
+[0.1.2]: https://github.com/gyuha/vscode-3d-model-lens/releases/tag/v0.1.2
+[0.1.1]: https://github.com/gyuha/vscode-3d-model-lens/releases/tag/v0.1.1
 [0.1.0]: https://github.com/gyuha/vscode-3d-model-lens/releases/tag/v0.1.0

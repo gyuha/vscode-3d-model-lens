@@ -3,7 +3,7 @@
   "displayName": "3D Model Lens",
   "description": "View glTF / GLB / STL models and measure their dimensions inside VS Code",
   "icon": "images/icon.png",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "publisher": "nicegyuha",
   "license": "MIT",
   "repository": {
@@ -86,11 +86,11 @@
           "markdownDescription": "Viewer background mode. Changing it from the viewer panel saves it here and applies to every open viewer immediately. For why `light` is pure white rather than a light gray, see the measurements in ADR `260822-195326`."
         },
         "modelLens.grid": {
-      "type": "boolean",
-      "default": true,
-      "markdownDescription": "Show the ground grid in the viewer. Toggling it from the viewer panel saves it here and applies to every open viewer immediately."
-    },
-    "modelLens.inspectorOnStart": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Show the ground grid in the viewer. Toggling it from the viewer panel saves it here and applies to every open viewer immediately."
+        },
+        "modelLens.inspectorOnStart": {
           "type": "boolean",
           "default": false,
           "description": "Start with the Babylon Inspector open when a model is opened."

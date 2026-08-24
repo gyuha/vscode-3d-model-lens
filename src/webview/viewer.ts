@@ -185,6 +185,12 @@ export async function createViewer(
     // 재생 중인 애니메이션은 `scene.render()` 안에서만 진행된다 — 그리지 않으면 얼어붙는다.
     gate.setContinuous(inspectorContinuous || animations.isPlaying);
     if (gate.shouldRender()) {
+      // 오른쪽 드래그(pan)는 Babylon 기본값으로는 픽셀당 이동할 **월드 거리**가 고정된다.
+      // 그래서 큰 모델이나 멀리 있는 카메라에서는 같은 드래그가 화면상 거의 움직이지 않는다.
+      // 투영 크기는 target 까지의 거리(radius)에 반비례하므로 pan 속도를 radius 에 비례시키면
+      // 줌 배율과 관계없이 화면에서 느끼는 이동량이 일정해진다. 매 프레임 갱신해야 휠 줌 직후의
+      // 첫 pan 에도 현재 배율이 적용된다.
+      camera.movement.panSpeed = camera.radius / 2;
       scene.render();
     }
   });
@@ -295,6 +301,23 @@ function createCamera(
 
 /** 모델 크기에 맞춘 줌·클리핑 한계. 프레이밍과 별개로 항상 적용한다. */
 function applyCameraLimits(camera: ArcRotateCamera, extents: Extents): void {
+  // **이 두 줄을 지우지 마라.** `ArcRotateCamera` 의 기본값은 `lowerBetaLimit = 0.01`,
+  // `upperBetaLimit = Math.PI - 0.01` 이고, 그러면 위/아래로 드래그할 때 정수리(0.6°)와
+  // 밑바닥(179.4°)에서 회전이 **완전히 멈춘다** — 추가 입력에도 beta 변화량이 0 이다.
+  // 지우려는 유혹이 생길 이유가 셋 있고, 셋 다 실측으로 확인해 기각했다.
+  //   (1) "beta < 0 에서 모델이 뒤집혀 보이는 건 버그다" — 아니다. `allowUpsideDown`(기본
+  //       `true`)이 화면 연속성을 위해 up 벡터를 뒤집는 것이고, 정수리를 넘어 계속 도는 것의
+  //       정의 그 자체다. 없앨 수 있는 대상이 아니다.
+  //   (2) "뒤집힌 구간에서 좌우 드래그가 반대로 갈 것이다" — 가지 않는다.
+  //       `_applyRotationAndZoomDelta()` 가 `beta < 0` 일 때 alpha 델타의 부호를 뒤집어 보정한다
+  //       (실측: beta=+1.2 에서 +0.05 → +0.05, beta=−1.2 에서 +0.05 → −0.05).
+  //   (3) "기본값의 0.01 여유는 beta=0 특이점(시선 ∥ up) 회피용이니 필요하다" — 없어도 깨지지
+  //       않는다. `LookAtLHToRef` 가 축 퇴화를 x축=(1,0,0) 으로 폴백해 NaN 을 내지 않는다.
+  // 회귀 장치는 e2e 의 `연속 수직 회전` 세 케이스다 (alpha 한계는 기본이 `null` 이라 좌우는
+  // 원래부터 무제한이었다).
+  camera.lowerBetaLimit = null;
+  camera.upperBetaLimit = null;
+
   const diagonal = extentDiagonal(extents) || 1;
   camera.lowerRadiusLimit = diagonal * 0.05;
   camera.upperRadiusLimit = diagonal * 20;

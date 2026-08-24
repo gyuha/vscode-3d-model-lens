@@ -276,6 +276,10 @@ function exposeTestSeam(viewer: Viewer): void {
     isIdle: () => viewer.isIdle(),
     // 빈 화면 회귀의 관측점 — 유휴인데 렌더되지 않는 메시가 남아 있으면 화면이 비어 있다.
     readyMeshes: () => viewer.readyMeshes(),
+    // 궤도 회전의 관측점. 각도를 **읽기만** 한다 — 회전을 유발하는 API 는 노출하지 않는다.
+    // 저장 상태(sessionStorage)를 대신 읽으면 디바운스된 저장 경로가 끼어들어, 실패했을 때
+    // "회전이 안 됐다"와 "저장이 안 됐다"를 구별할 수 없다.
+    camera: () => viewer.cameraState(),
   };
 }
 

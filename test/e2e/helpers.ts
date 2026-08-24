@@ -132,6 +132,25 @@ export async function readyMeshes(page: Page): Promise<{ ready: number; total: n
   );
 }
 
+/**
+ * 카메라의 궤도 각도. 회전이 어디까지 갔는지 보는 **관측점**이며 회전을 유발하지 않는다.
+ *
+ * 저장 상태(`sessionStorage`)를 대신 읽으면 디바운스된 저장 경로가 끼어들어, 실패했을 때
+ * "회전이 안 됐다"와 "저장이 안 됐다"를 구별할 수 없다.
+ */
+export async function cameraAngles(
+  page: Page,
+): Promise<{ alpha: number; beta: number; radius: number }> {
+  return page.evaluate(
+    () =>
+      (
+        window as unknown as {
+          __modelLens: { camera: () => { alpha: number; beta: number; radius: number } };
+        }
+      ).__modelLens.camera(),
+  );
+}
+
 export async function isIdle(page: Page): Promise<boolean> {
   return page.evaluate(
     () => (window as unknown as { __modelLens: { isIdle: () => boolean } }).__modelLens.isIdle(),
@@ -151,6 +170,21 @@ export async function waitForIdle(page: Page, timeoutMs = 15_000): Promise<boole
 }
 
 /**
+ * swiftshader(소프트웨어 래스터라이저)가 찍는 **성능 경고**만 걸러낸다.
+ *
+ * `--use-angle=swiftshader` 환경에서 십수 초간 연속 렌더링하면 ANGLE 이
+ * "GPU stall due to ReadPixels" 를 찍는다. 이것은 **테스트 환경의 산물이며 제품 문제가 아니다** —
+ * 좌우 회전만 13초 돌려도 같은 경고 4건이 나오는 것으로 확인했고(좌우는 `alpha` 한계가 원래부터
+ * `null` 이라 이 프로젝트의 어떤 변경과도 무관하다), 실제 VS Code 웹뷰는 하드웨어 GL 을 쓴다.
+ *
+ * 조건을 `GL Driver Message` + `Performance` 로 좁게 잡는 것이 중요하다 — 이 함수의 본래 목적은
+ * Babylon 이 조용히 무력화될 때 찍는 `Logger.Warn` 을 잡는 것이고, 그것을 가려서는 안 된다.
+ */
+function isDriverNoise(text: string): boolean {
+  return text.includes('GL Driver Message') && text.includes('Performance');
+}
+
+/**
  * 콘솔의 경고·에러를 모은다.
  *
  * Babylon 9 는 side-effect import 가 빠지면 **예외 없이 조용히 무력화되고 `Logger.Warn` 만 찍는다**
@@ -160,7 +194,7 @@ export async function waitForIdle(page: Page, timeoutMs = 15_000): Promise<boole
 export function collectConsoleProblems(page: Page): string[] {
   const problems: string[] = [];
   page.on('console', (message) => {
-    if (message.type() === 'warning' || message.type() === 'error') {
+    if ((message.type() === 'warning' || message.type() === 'error') && !isDriverNoise(message.text())) {
       problems.push(`${message.type()}: ${message.text()}`);
     }
   });

@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
   axisPair,
+  cameraAngles,
   collectConsoleProblems,
   collectExternalRequests,
   collectHostMessages,
@@ -759,5 +760,119 @@ test.describe('측정 모드 패널 토글', () => {
       ),
       '복원이 호스트에 알리지 않으면 session.measureActive 가 false 로 남아 아이콘이 한 번 먹히지 않는다',
     ).toContainEqual({ type: 'measureModeState', active: true });
+  });
+});
+
+test.describe('연속 수직 회전', () => {
+  // 드래그를 한 번에 담을 수 없어 down→move→up 사이클을 **반복해 누적**한다. 실측으로 한
+  // 사이클이 약 100° 이므로 12 사이클이면 어느 방향으로도 극점을 여러 번 지난다.
+  //
+  // **방향 이름은 마우스가 아니라 극점 기준이다.** `onTouch()` 가 `-offsetY` 를 beta 에 더하므로
+  // 마우스를 **아래로** 끌면 beta 가 줄어 정수리(위에서 내려다보기)로 가고, 위로 끌면 beta 가
+  // 늘어 밑바닥으로 간다. 마우스 방향으로 이름을 붙이면 정확히 뒤집힌다.
+  const CYCLES = 8;
+
+  async function orbit(page: Page, direction: 'toTop' | 'toBottom' | 'sideways'): Promise<void> {
+    const box = await page.locator('#canvas').boundingBox();
+    expect(box, '캔버스를 찾지 못했다').not.toBeNull();
+    if (!box) {
+      return;
+    }
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    const dx = direction === 'sideways' ? -box.width * 0.45 : 0;
+    const dy =
+      direction === 'toTop'
+        ? box.height * 0.45
+        : direction === 'toBottom'
+          ? -box.height * 0.45
+          : 0;
+
+    await page.mouse.move(cx, cy);
+    await page.mouse.down();
+    for (let i = 1; i <= 10; i++) {
+      await page.mouse.move(cx + (dx * i) / 10, cy + (dy * i) / 10);
+    }
+    await page.mouse.up();
+    // 관성 꼬리가 끝나야 이 사이클의 회전이 전부 반영된다.
+    expect(await waitForIdle(page), '드래그 후 멈추지 않았다').toBe(true);
+  }
+
+  /** 사이클마다 beta 를 찍어 남긴다. 벽에 붙으면 연속한 두 값이 같아진다 — 그게 증상이다. */
+  async function betaTrail(page: Page, direction: 'toTop' | 'toBottom'): Promise<number[]> {
+    const trail = [(await cameraAngles(page)).beta];
+    for (let i = 0; i < CYCLES; i++) {
+      await orbit(page, direction);
+      trail.push((await cameraAngles(page)).beta);
+    }
+    return trail;
+  }
+
+  function stuckAt(trail: number[]): number | undefined {
+    for (let i = 1; i < trail.length; i++) {
+      if (Math.abs(trail[i] - trail[i - 1]) < 1e-6) {
+        return trail[i];
+      }
+    }
+    return undefined;
+  }
+
+  const fmt = (trail: number[]): string =>
+    trail.map((b) => ((b * 180) / Math.PI).toFixed(1)).join(' → ');
+
+  const WALLS = [
+    { direction: 'toTop' as const, label: '정수리', wall: 'lowerBetaLimit 0.01 (= 0.6°)' },
+    { direction: 'toBottom' as const, label: '밑바닥', wall: 'upperBetaLimit π−0.01 (= 179.4°)' },
+  ];
+
+  for (const { direction, label, wall } of WALLS) {
+    test(`${label} 쪽으로 계속 드래그해도 멈추지 않는다`, async ({ page }) => {
+      const problems = collectConsoleProblems(page);
+      await page.goto('/?fixture=cube.glb');
+      expect(await waitForViewer(page)).toBe('ready');
+
+      const trail = await betaTrail(page, direction);
+
+      expect(
+        stuckAt(trail),
+        `${wall} 한계에 붙어 회전이 멈췄다 — beta(deg): ${fmt(trail)}`,
+      ).toBeUndefined();
+
+      // 극점을 실제로 통과했으면 beta 가 음수 구간에 들어간다. 정수리는 0 을 지나 바로 음수가
+      // 되고, 밑바닥은 π 를 넘는 순간 `_checkLimits` 가 −2π 로 감으므로 역시 음수가 된다.
+      expect(
+        trail.some((b) => b < 0),
+        `극점을 통과하지 못했다 — beta(deg): ${fmt(trail)}`,
+      ).toBe(true);
+
+      expect(problems, `콘솔 경고: ${problems.join(' | ')}`).toEqual([]);
+    });
+  }
+
+  test('뒤집힌 구간(beta < 0)에서도 좌우 회전이 살아 있다', async ({ page }) => {
+    const problems = collectConsoleProblems(page);
+    await page.goto('/?fixture=cube.glb');
+    expect(await waitForViewer(page)).toBe('ready');
+
+    // 연속 회전이 되면 고정 사이클 뒤의 beta 는 임의값이다(계속 돌아가므로). 그래서 음수
+    // 구간에 **들어간 순간 멈추고** 거기서 좌우를 본다.
+    const trail = [(await cameraAngles(page)).beta];
+    for (let i = 0; i < CYCLES && trail[trail.length - 1] >= 0; i++) {
+      await orbit(page, 'toTop');
+      trail.push((await cameraAngles(page)).beta);
+    }
+    const beta = trail[trail.length - 1];
+    expect(beta, `뒤집힌 구간에 들어가지 못했다 — beta(deg): ${fmt(trail)}`).toBeLessThan(0);
+
+    const before = (await cameraAngles(page)).alpha;
+    await orbit(page, 'sideways');
+    const after = (await cameraAngles(page)).alpha;
+
+    expect(
+      Math.abs(after - before),
+      `beta=${((beta * 180) / Math.PI).toFixed(1)}° 에서 좌우 드래그가 먹지 않았다`,
+    ).toBeGreaterThan(0.05);
+
+    expect(problems, `콘솔 경고: ${problems.join(' | ')}`).toEqual([]);
   });
 });
