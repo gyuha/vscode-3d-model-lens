@@ -29,6 +29,32 @@ function box(sizeX, sizeY, sizeZ) {
   return { positions, indices, min: [-x, -y, -z], max: [x, y, z] };
 }
 
+/**
+ * 손잡이(chirality)를 드러내는 비대칭 사면체 — 원점에서 각 축으로 길이가 다른 팔 셋.
+ *
+ * **원점 중심 직육면체로는 거울상을 검출할 수 없다.** 반사는 바운딩 박스를 바꾸지 않고,
+ * 대칭 형상은 자기 거울상과 정점 집합까지 동일하다. 그래서 이 형상은 세 가지를 동시에 만족한다.
+ * - 팔 길이가 3 / 2 / 1 로 모두 달라 **축 맞바꿈**이 드러난다
+ * - 원점 중심이 아니라 **부호 오류**가 드러난다
+ * - 자기 거울상과 정점 집합이 달라 **반사**가 드러난다
+ */
+function tetra() {
+  const positions = [
+    [0, 0, 0], // O
+    [3, 0, 0], // +X 팔
+    [0, 2, 0], // +Y 팔
+    [0, 0, 1], // +Z 팔
+  ];
+  // 감김은 box() 와 같은 규약 — 바깥에서 볼 때 반시계(CCW).
+  const indices = [
+    0, 2, 1, // z=0 면 (법선 -Z)
+    0, 1, 3, // y=0 면 (법선 -Y)
+    0, 3, 2, // x=0 면 (법선 -X)
+    1, 2, 3, // 기울어진 면
+  ];
+  return { positions, indices, min: [0, 0, 0], max: [3, 2, 1] };
+}
+
 function binaryFor({ positions, indices }) {
   const pos = Buffer.alloc(positions.length * 3 * 4);
   positions.flat().forEach((v, i) => pos.writeFloatLE(v, i * 4));
@@ -37,13 +63,13 @@ function binaryFor({ positions, indices }) {
   return { pos, idx, buffer: Buffer.concat([pos, idx]) };
 }
 
-function gltfJson(geo, bin, bufferSpec) {
+function gltfJson(geo, bin, bufferSpec, name = 'FixtureBox') {
   return {
     asset: { version: '2.0', generator: '3d-model-lens fixture generator' },
     scene: 0,
     scenes: [{ nodes: [0] }],
-    nodes: [{ mesh: 0, name: 'FixtureBox' }],
-    meshes: [{ name: 'FixtureBox', primitives: [{ attributes: { POSITION: 0 }, indices: 1 }] }],
+    nodes: [{ mesh: 0, name }],
+    meshes: [{ name, primitives: [{ attributes: { POSITION: 0 }, indices: 1 }] }],
     buffers: [bufferSpec],
     bufferViews: [
       { buffer: 0, byteOffset: 0, byteLength: bin.pos.length, target: 34962 },
@@ -194,6 +220,17 @@ function asciiStl(geo, name) {
 
 // --- cube.stl (ASCII)
 writeFileSync(join(OUT, 'cube.stl'), asciiStl(box(10, 20, 30), 'fixture_cube'));
+
+// --- chiral.stl + chiral.glb — 같은 숫자 좌표를 두 포맷으로. 손잡이 회귀 장치.
+//
+// 이 쌍의 존재 이유: 두 로더의 좌표 처리가 어긋나면 **같은 형상이 서로 거울상으로 실린다.**
+// 치수 단정은 그것을 볼 수 없다(반사는 바운딩 박스를 보존한다). 그래서 정점 집합을 직접 비교한다.
+{
+  const geo = tetra();
+  const bin = binaryFor(geo);
+  writeFileSync(join(OUT, 'chiral.stl'), asciiStl(geo, 'fixture_chiral'));
+  writeGlb('chiral.glb', gltfJson(geo, bin, { byteLength: bin.buffer.length }, 'FixtureChiral'), bin.buffer);
+}
 
 // --- cube_large.stl — cube.stl 의 100배. 마커·그리드·카메라가 스케일에 비례하는지 검증용.
 {

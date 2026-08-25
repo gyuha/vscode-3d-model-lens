@@ -5,6 +5,19 @@ All notable changes to the **3D Model Lens** extension are documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2026-08-26
+
+### Fixed
+
+- **STL models are no longer mirrored** — STL stores right-handed coordinates, and the viewer was
+  loading them unchanged into a left-handed scene, so every asymmetric STL rendered as its own
+  left-right mirror image. STL meshes are now reflected once, which places them in exactly the same
+  world space as the equivalent glTF. Reported dimensions and measured distances were never wrong —
+  a reflection preserves both the bounding box and point-to-point distance — which is also why no
+  existing test could see the bug; a new asymmetric fixture pair (`chiral.stl` / `chiral.glb`) and a
+  world-vertex equality check now guard it. Still not corrected: a Z-up CAD STL appears lying on its
+  side, because the STL format carries no up-axis information and guessing it would be a lie.
+
 ## [0.1.2] - 2026-08-25
 
 ### Changed

@@ -85,6 +85,59 @@ describe('픽스처 무결성', () => {
     expect(inward, `안쪽을 향하는 삼각형 인덱스: ${inward.join(', ')}`).toEqual([]);
   });
 
+  it('chiral.stl / chiral.glb 는 같은 정점 좌표를 담는다 — 손잡이 회귀 장치의 전제', () => {
+    const stl = readFileSync(join(DIR, 'chiral.stl'), 'utf8');
+    const stlVerts = new Set(
+      [...stl.matchAll(/vertex (\S+) (\S+) (\S+)/g)].map((m) =>
+        [m[1], m[2], m[3]].map(Number).join(','),
+      ),
+    );
+
+    const glb = readFileSync(join(DIR, 'chiral.glb'));
+    const jsonLength = glb.readUInt32LE(12);
+    const json = JSON.parse(glb.subarray(20, 20 + jsonLength).toString('utf8'));
+    const acc = json.accessors[0];
+    const binStart = 20 + jsonLength + 8;
+    const glbVerts = new Set<string>();
+    for (let i = 0; i < acc.count; i++) {
+      const at = binStart + i * 12;
+      glbVerts.add(
+        [0, 4, 8].map((o) => glb.readFloatLE(at + o)).join(','),
+      );
+    }
+
+    // 두 파일이 같은 숫자를 담고 있어야, 로드 후 좌표가 다르다면 그건 로더 처리 차이다.
+    expect([...glbVerts].sort()).toEqual([...stlVerts].sort());
+    expect(acc.max.map((m: number, i: number) => m - acc.min[i])).toEqual([3, 2, 1]);
+  });
+
+  it('chiral.stl 의 모든 삼각형 법선이 바깥을 향한다 — 이 픽스처는 원점 중심이 아니므로 입체 무게중심을 기준으로 본다', () => {
+    const stl = readFileSync(join(DIR, 'chiral.stl'), 'utf8');
+    const verts = [...stl.matchAll(/vertex (\S+) (\S+) (\S+)/g)].map((m) =>
+      [m[1], m[2], m[3]].map(Number),
+    );
+    const unique = [...new Set(verts.map((v) => v.join(',')))].map((k) => k.split(',').map(Number));
+    const solid = [0, 1, 2].map((i) => unique.reduce((a, v) => a + v[i], 0) / unique.length);
+
+    const inward: number[] = [];
+    for (let t = 0; t < verts.length; t += 3) {
+      const [a, b, c] = [verts[t], verts[t + 1], verts[t + 2]];
+      const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+      const v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+      const n = [
+        u[1] * v[2] - u[2] * v[1],
+        u[2] * v[0] - u[0] * v[2],
+        u[0] * v[1] - u[1] * v[0],
+      ];
+      const face = [0, 1, 2].map((i) => (a[i] + b[i] + c[i]) / 3);
+      const dot = [0, 1, 2].reduce((sum, i) => sum + n[i] * (face[i] - solid[i]), 0);
+      if (dot <= 0) {
+        inward.push(t / 3);
+      }
+    }
+    expect(inward, `안쪽을 향하는 삼각형 인덱스: ${inward.join(', ')}`).toEqual([]);
+  });
+
   it('broken.glb 는 0바이트다 — 에러 UI 검증용', () => {
     expect(readFileSync(join(DIR, 'broken.glb')).length).toBe(0);
   });

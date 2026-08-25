@@ -18,6 +18,7 @@ import type { CameraState } from './viewerState.js';
 import { createAnimationController, type AnimationController } from './animation.js';
 import { Chrome, ensureMaterials } from './chrome.js';
 import { computeExtents, extentDiagonal, type Extents } from './geometry.js';
+import { applyHandednessFix } from './handedness.js';
 import { MeasurementTool } from './measurement.js';
 import { RenderGate } from './renderGate.js';
 import { registerModelLensLoaders } from './loaders.js';
@@ -112,6 +113,8 @@ export async function createViewer(
   if (meshes.length === 0) {
     throw new Error('The model has no renderable mesh.');
   }
+  // 치수·프레이밍보다 **먼저** 부른다 — 둘 다 월드 좌표를 본다.
+  applyHandednessFix(meshes, config.pluginExtension);
   ensureMaterials(scene, meshes);
 
   const extents = computeExtents(scene, meshes);
