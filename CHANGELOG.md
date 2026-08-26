@@ -5,6 +5,33 @@ All notable changes to the **3D Model Lens** extension are documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-08-27
+
+### Changed
+
+- **Rotation is now screen-relative** — dragging or arrow-keying left/right always turns the model
+  about the axis you see as vertical on screen. It used to turn about the world's up axis, so the
+  more the camera was tilted the more the input leaked into spinning the image instead of turning the
+  model: at a near-top-down angle a `5.7°` input moved the view by `1.1°` and rolled the screen by
+  `5.6°` (the relation is `turn ≈ θ·sin β`, `roll ≈ θ·cos β`, and roll wins below `β = 45°`).
+  `ArcRotateCamera` cannot express this — it has no roll parameter — so the viewer now drives a
+  free-orientation (quaternion) camera with its own pointer and keyboard handling. Vertical rotation
+  is unbounded as before, and left-drag/right-drag/wheel keep their meanings.
+- **The ground grid tilts with the view.** This is the accepted cost of screen-relative rotation, not
+  a defect: a level grid requires locking the up axis to world Y, which is exactly what makes the
+  rotation object-relative. The tilt doubles as the only cue for where world-up is.
+
+### Fixed
+
+- **Panning keeps its zoom-independent speed** and inertia still decays after a drag — both carried
+  over to the new camera deliberately.
+
+### Note
+
+- A viewer tab open across this upgrade restores its measurements but re-frames the camera: the saved
+  camera shape changed (angles → orientation), and the old shape is dropped rather than discarding
+  the whole saved state.
+
 ## [0.2.1] - 2026-08-26
 
 ### Fixed

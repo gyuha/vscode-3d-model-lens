@@ -174,23 +174,38 @@ export async function readyMeshes(page: Page): Promise<{ ready: number; total: n
   );
 }
 
+/** 3성분 벡터. */
+export type Vec3 = [number, number, number];
+
 /**
- * 카메라의 궤도 각도. 회전이 어디까지 갔는지 보는 **관측점**이며 회전을 유발하지 않는다.
+ * 카메라의 **시선·화면축**. 회전이 어디로 갔는지 보는 관측점이며 회전을 유발하지 않는다.
  *
- * 저장 상태(`sessionStorage`)를 대신 읽으면 디바운스된 저장 경로가 끼어들어, 실패했을 때
- * "회전이 안 됐다"와 "저장이 안 됐다"를 구별할 수 없다.
+ * `alpha`/`beta` 를 읽지 않는 이유: 카메라가 자유 자세(쿼터니언)라 그런 값이 없다.
+ * 대신 벡터로 재면 카메라 모델과 무관하게 "얼마나 돌았나"를 물을 수 있다 (ADR `260826-232902`).
  */
-export async function cameraAngles(
+export async function cameraAxes(
   page: Page,
-): Promise<{ alpha: number; beta: number; radius: number }> {
+): Promise<{ forward: Vec3; up: Vec3; right: Vec3 }> {
   return page.evaluate(
     () =>
       (
         window as unknown as {
-          __modelLens: { camera: () => { alpha: number; beta: number; radius: number } };
+          __modelLens: { cameraAxes: () => { forward: Vec3; up: Vec3; right: Vec3 } };
         }
-      ).__modelLens.camera(),
+      ).__modelLens.cameraAxes(),
   );
+}
+
+/** 두 단위벡터 사이 각(라디안). */
+export function angleBetween(a: Vec3, b: Vec3): number {
+  const dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  return Math.acos(Math.max(-1, Math.min(1, dot)));
+}
+
+/** `a → b` 변화를 기준축에 투영한 부호 — 어느 쪽으로 돌았는지. */
+export function turnSign(a: Vec3, b: Vec3, axis: Vec3): number {
+  const d: Vec3 = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+  return d[0] * axis[0] + d[1] * axis[1] + d[2] * axis[2];
 }
 
 export async function isIdle(page: Page): Promise<boolean> {

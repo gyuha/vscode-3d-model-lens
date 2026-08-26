@@ -17,10 +17,20 @@
 export const VIEWER_STATE_VERSION = 1;
 
 export type Triple = [number, number, number];
+export type Quad = [number, number, number, number];
 
+/**
+ * 카메라 자세. **`alpha`/`beta` 가 아니라 쿼터니언이다** — 화면 기준 회전은 롤을 표현할 수 있어야
+ * 하고 `alpha`/`beta` 로는 롤을 담을 수 없다 (ADR `260826-232902`).
+ *
+ * **`VIEWER_STATE_VERSION` 은 올리지 않았다.** 올리면 카메라 모양 하나 때문에 저장 상태 전체
+ * (측정 목록·선택·애니메이션)를 버리게 된다. 옛 `alpha`/`beta` 모양은 아래 `readCamera` 의 검증에서
+ * 탈락해 **카메라만 `null` 이 되고 자동 프레이밍으로 떨어지며, 측정값은 그대로 살아남는다.**
+ * 같은 판단을 축 기즈모 제거(task 9)에서도 했다.
+ */
 export interface CameraState {
-  alpha: number;
-  beta: number;
+  /** 쿼터니언 `[x, y, z, w]`. */
+  orientation: Quad;
   radius: number;
   target: Triple;
 }
@@ -147,10 +157,23 @@ function readCamera(raw: unknown): CameraState | null {
     return null;
   }
   const target = readTriple(raw.target);
-  if (!target || !isFinite(raw.alpha) || !isFinite(raw.beta) || !isFinite(raw.radius)) {
+  const orientation = readQuad(raw.orientation);
+  // `orientation` 이 없으면 옛 `alpha`/`beta` 모양이다 — 카메라만 버린다(측정값은 보존).
+  if (!target || !orientation || !isFinite(raw.radius)) {
     return null;
   }
-  return { alpha: raw.alpha, beta: raw.beta, radius: raw.radius, target };
+  return { orientation, radius: raw.radius, target };
+}
+
+function readQuad(raw: unknown): Quad | null {
+  if (!Array.isArray(raw) || raw.length !== 4 || !raw.every(isFinite)) {
+    return null;
+  }
+  // 0 쿼터니언은 자세를 정의하지 못한다 — 정규화가 NaN 을 낸다.
+  if (raw[0] === 0 && raw[1] === 0 && raw[2] === 0 && raw[3] === 0) {
+    return null;
+  }
+  return [raw[0], raw[1], raw[2], raw[3]];
 }
 
 function readMeasurements(raw: unknown): MeasurementState[] {

@@ -330,6 +330,8 @@ function exposeTestSeam(viewer: Viewer): void {
     // 저장 상태(sessionStorage)를 대신 읽으면 디바운스된 저장 경로가 끼어들어, 실패했을 때
     // "회전이 안 됐다"와 "저장이 안 됐다"를 구별할 수 없다.
     camera: () => viewer.cameraState(),
+    // 회전 관측점 — 시선·화면축. 읽기만 하며 회전을 유발하지 않는다.
+    cameraAxes: () => viewer.cameraAxes(),
   };
 }
 

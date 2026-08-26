@@ -3,7 +3,7 @@
   "displayName": "3D Model Lens",
   "description": "View glTF / GLB / STL models and measure their dimensions inside VS Code",
   "icon": "images/icon.png",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "publisher": "nicegyuha",
   "license": "MIT",
   "repository": {

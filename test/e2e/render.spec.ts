@@ -1,8 +1,10 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
   axisPair,
-  cameraAngles,
+  angleBetween,
+  cameraAxes,
   collectConsoleProblems,
+  turnSign,
   collectExternalRequests,
   collectHostMessages,
   extents,
@@ -766,15 +768,16 @@ test.describe('측정 모드 패널 토글', () => {
 });
 
 test.describe('연속 수직 회전', () => {
-  // 드래그를 한 번에 담을 수 없어 down→move→up 사이클을 **반복해 누적**한다. 실측으로 한
-  // 사이클이 약 100° 이므로 12 사이클이면 어느 방향으로도 극점을 여러 번 지난다.
+  // 카메라가 자유 자세(쿼터니언)라 `alpha`/`beta` 가 없다. 그래서 **시선 벡터**로 잰다 —
+  // 카메라 모델과 무관하게 "얼마나 돌았나"를 물을 수 있다 (ADR `260826-232902`).
   //
-  // **방향 이름은 마우스가 아니라 극점 기준이다.** `onTouch()` 가 `-offsetY` 를 beta 에 더하므로
-  // 마우스를 **아래로** 끌면 beta 가 줄어 정수리(위에서 내려다보기)로 가고, 위로 끌면 beta 가
-  // 늘어 밑바닥으로 간다. 마우스 방향으로 이름을 붙이면 정확히 뒤집힌다.
+  // 이 테스트가 지키는 보장은 `v0.1.1` 에서 온 것이다: **위/아래로 계속 드래그해도 멈추지
+  // 않는다.** 쿼터니언 자세에서는 극점이 특별하지 않으므로 자동으로 성립하지만, 테스트를 지우면
+  // 그 보장이 문서에서 사라진다.
   const CYCLES = 8;
+  const STUCK = 0.01; // rad — 한 사이클에 이보다 덜 움직이면 벽에 붙은 것이다
 
-  async function orbit(page: Page, direction: 'toTop' | 'toBottom' | 'sideways'): Promise<void> {
+  async function orbit(page: Page, direction: 'up' | 'down' | 'sideways'): Promise<void> {
     const box = await page.locator('#canvas').boundingBox();
     expect(box, '캔버스를 찾지 못했다').not.toBeNull();
     if (!box) {
@@ -783,97 +786,65 @@ test.describe('연속 수직 회전', () => {
     const cx = box.x + box.width / 2;
     const cy = box.y + box.height / 2;
     const dx = direction === 'sideways' ? -box.width * 0.45 : 0;
-    const dy =
-      direction === 'toTop'
-        ? box.height * 0.45
-        : direction === 'toBottom'
-          ? -box.height * 0.45
-          : 0;
-
+    const dy = direction === 'up' ? -box.height * 0.45 : direction === 'down' ? box.height * 0.45 : 0;
     await page.mouse.move(cx, cy);
     await page.mouse.down();
     for (let i = 1; i <= 10; i++) {
       await page.mouse.move(cx + (dx * i) / 10, cy + (dy * i) / 10);
     }
     await page.mouse.up();
-    // 관성 꼬리가 끝나야 이 사이클의 회전이 전부 반영된다.
     expect(await waitForIdle(page), '드래그 후 멈추지 않았다').toBe(true);
   }
 
-  /** 사이클마다 beta 를 찍어 남긴다. 벽에 붙으면 연속한 두 값이 같아진다 — 그게 증상이다. */
-  async function betaTrail(page: Page, direction: 'toTop' | 'toBottom'): Promise<number[]> {
-    const trail = [(await cameraAngles(page)).beta];
-    for (let i = 0; i < CYCLES; i++) {
-      await orbit(page, direction);
-      trail.push((await cameraAngles(page)).beta);
-    }
-    return trail;
-  }
-
-  function stuckAt(trail: number[]): number | undefined {
-    for (let i = 1; i < trail.length; i++) {
-      if (Math.abs(trail[i] - trail[i - 1]) < 1e-6) {
-        return trail[i];
-      }
-    }
-    return undefined;
-  }
-
-  const fmt = (trail: number[]): string =>
-    trail.map((b) => ((b * 180) / Math.PI).toFixed(1)).join(' → ');
-
-  const WALLS = [
-    { direction: 'toTop' as const, label: '정수리', wall: 'lowerBetaLimit 0.01 (= 0.6°)' },
-    { direction: 'toBottom' as const, label: '밑바닥', wall: 'upperBetaLimit π−0.01 (= 179.4°)' },
-  ];
-
-  for (const { direction, label, wall } of WALLS) {
-    test(`${label} 쪽으로 계속 드래그해도 멈추지 않는다`, async ({ page }) => {
+  for (const direction of ['up', 'down'] as const) {
+    test(`${direction === 'up' ? '위' : '아래'}로 계속 드래그해도 멈추지 않는다`, async ({ page }) => {
       const problems = collectConsoleProblems(page);
       await page.goto('/?fixture=cube.glb');
       expect(await waitForViewer(page)).toBe('ready');
 
-      const trail = await betaTrail(page, direction);
+      const steps: number[] = [];
+      let upDotWorldY = 1;
+      let previous = (await cameraAxes(page)).forward;
+      for (let i = 0; i < CYCLES; i++) {
+        await orbit(page, direction);
+        const axes = await cameraAxes(page);
+        steps.push(angleBetween(previous, axes.forward));
+        previous = axes.forward;
+        upDotWorldY = Math.min(upDotWorldY, axes.up[1]);
+      }
 
+      const trail = steps.map((r) => ((r * 180) / Math.PI).toFixed(1)).join(' · ');
       expect(
-        stuckAt(trail),
-        `${wall} 한계에 붙어 회전이 멈췄다 — beta(deg): ${fmt(trail)}`,
-      ).toBeUndefined();
-
-      // 극점을 실제로 통과했으면 beta 가 음수 구간에 들어간다. 정수리는 0 을 지나 바로 음수가
-      // 되고, 밑바닥은 π 를 넘는 순간 `_checkLimits` 가 −2π 로 감으므로 역시 음수가 된다.
-      expect(
-        trail.some((b) => b < 0),
-        `극점을 통과하지 못했다 — beta(deg): ${fmt(trail)}`,
-      ).toBe(true);
+        steps.filter((step) => step < STUCK).length,
+        `어느 사이클에서 회전이 멈췄다 — 사이클별 시선 변화(deg): ${trail}`,
+      ).toBe(0);
+      // 극점을 실제로 지났으면 화면의 up 이 월드 아래를 향하는 순간이 있다.
+      expect(upDotWorldY, `극점을 통과하지 못했다 — 사이클별 시선 변화(deg): ${trail}`).toBeLessThan(0);
 
       expect(problems, `콘솔 경고: ${problems.join(' | ')}`).toEqual([]);
     });
   }
 
-  test('뒤집힌 구간(beta < 0)에서도 좌우 회전이 살아 있다', async ({ page }) => {
+  test('뒤집힌 구간에서도 좌우 회전이 살아 있다', async ({ page }) => {
     const problems = collectConsoleProblems(page);
     await page.goto('/?fixture=cube.glb');
     expect(await waitForViewer(page)).toBe('ready');
 
-    // 연속 회전이 되면 고정 사이클 뒤의 beta 는 임의값이다(계속 돌아가므로). 그래서 음수
-    // 구간에 **들어간 순간 멈추고** 거기서 좌우를 본다.
-    const trail = [(await cameraAngles(page)).beta];
-    for (let i = 0; i < CYCLES && trail[trail.length - 1] >= 0; i++) {
-      await orbit(page, 'toTop');
-      trail.push((await cameraAngles(page)).beta);
+    // 화면의 up 이 월드 아래를 향할 때까지 위로 돌린다.
+    let axes = await cameraAxes(page);
+    for (let i = 0; i < CYCLES && axes.up[1] >= 0; i++) {
+      await orbit(page, 'up');
+      axes = await cameraAxes(page);
     }
-    const beta = trail[trail.length - 1];
-    expect(beta, `뒤집힌 구간에 들어가지 못했다 — beta(deg): ${fmt(trail)}`).toBeLessThan(0);
+    expect(axes.up[1], '뒤집힌 구간에 들어가지 못했다').toBeLessThan(0);
 
-    const before = (await cameraAngles(page)).alpha;
+    const before = axes.forward;
     await orbit(page, 'sideways');
-    const after = (await cameraAngles(page)).alpha;
-
+    const after = (await cameraAxes(page)).forward;
     expect(
-      Math.abs(after - before),
-      `beta=${((beta * 180) / Math.PI).toFixed(1)}° 에서 좌우 드래그가 먹지 않았다`,
-    ).toBeGreaterThan(0.05);
+      angleBetween(before, after),
+      '뒤집힌 구간에서 좌우 드래그가 먹지 않았다',
+    ).toBeGreaterThan(STUCK);
 
     expect(problems, `콘솔 경고: ${problems.join(' | ')}`).toEqual([]);
   });
@@ -990,34 +961,28 @@ test.describe('패널 숨기기', () => {
 
 test.describe('방향키 회전 방향', () => {
   // 어느 쪽이 "옳은" 방향인지 박아 넣지 않는다 — **마우스와 같은 방향인지**만 단정한다.
-  // Babylon 기본값은 둘이 반대다: 마우스는 `-offsetX`, 키보드 오른쪽 키는 `+1`.
+  // 그래서 카메라 모델을 바꿔도 그대로 유효한 회귀 장치다.
   //
-  // **회전량을 작게 유지하는 것이 이 테스트의 전제다.** 수직 회전 한계를 제거했으므로 각도는
-  // `(-180°, 180°]` 로 감긴다 — 큰 회전에서는 `after - before` 의 부호가 감김에 오염되어
-  // 우연히 통과할 수 있다. 그래서 짧게 움직이고, 언랩한 뒤, 감기지 않았음을 함께 단정한다.
-  const SMALL = 0.02; // rad — 이보다 작으면 입력이 먹지 않은 것
-  const NO_WRAP = 2.5; // rad — 이보다 크면 감겼을 수 있어 부호를 믿을 수 없다
-
-  const unwrap = (delta: number): number => Math.atan2(Math.sin(delta), Math.cos(delta));
-  const deg = (v: number): string => ((v * 180) / Math.PI).toFixed(2) + 'deg';
+  // 자유 자세에는 `alpha`/`beta` 가 없으므로 부호를 **시선 변화를 화면축에 투영해서** 얻는다.
+  const SMALL = 0.005;
 
   const CASES = [
-    { key: 'ArrowRight', axis: 'alpha' as const, drag: { dx: 1, dy: 0 }, label: '오른쪽' },
-    { key: 'ArrowDown', axis: 'beta' as const, drag: { dx: 0, dy: 1 }, label: '아래' },
+    { key: 'ArrowRight', axis: 'right' as const, drag: { dx: 1, dy: 0 }, label: '오른쪽' },
+    { key: 'ArrowDown', axis: 'up' as const, drag: { dx: 0, dy: 1 }, label: '아래' },
   ];
 
   for (const { key, axis, drag, label } of CASES) {
     test(`${label} 방향키와 ${label} 드래그가 같은 방향으로 돈다`, async ({ page }) => {
       const problems = collectConsoleProblems(page);
 
-      const keyDelta = await measure(page, axis, async () => {
+      const keySign = await measure(page, axis, async () => {
         await page.locator('#canvas').focus();
         await page.keyboard.down(key);
         await page.waitForTimeout(120);
         await page.keyboard.up(key);
       });
 
-      const dragDelta = await measure(page, axis, async () => {
+      const dragSign = await measure(page, axis, async () => {
         const box = await page.locator('#canvas').boundingBox();
         if (!box) {
           return;
@@ -1033,37 +998,36 @@ test.describe('방향키 회전 방향', () => {
         await page.mouse.up();
       });
 
-      for (const [what, delta] of [
-        ['키', keyDelta],
-        ['드래그', dragDelta],
+      for (const [what, value] of [
+        ['키', keySign],
+        ['드래그', dragSign],
       ] as const) {
-        expect(Math.abs(delta), `${label} ${what}가 카메라를 움직이지 않았다`).toBeGreaterThan(SMALL);
         expect(
-          Math.abs(delta),
-          `${label} ${what}의 회전량이 너무 커서 감김 여부를 믿을 수 없다 (${deg(delta)})`,
-        ).toBeLessThan(NO_WRAP);
+          Math.abs(value),
+          `${label} ${what}가 카메라를 움직이지 않았다`,
+        ).toBeGreaterThan(SMALL);
       }
-
       expect(
-        Math.sign(keyDelta),
-        `${label} 키와 ${label} 드래그가 반대로 돈다 — 키 ${deg(keyDelta)} / 드래그 ${deg(dragDelta)}`,
-      ).toBe(Math.sign(dragDelta));
+        Math.sign(keySign),
+        `${label} 키와 ${label} 드래그가 반대로 돈다 — 키 ${keySign.toFixed(4)} / 드래그 ${dragSign.toFixed(4)}`,
+      ).toBe(Math.sign(dragSign));
 
       expect(problems, `콘솔 경고: ${problems.join(' | ')}`).toEqual([]);
     });
   }
 
-  /** 매번 새로 로드해 같은 초기 상태에서 잰다 — 앞선 조작이 누적되면 감김에 걸린다. */
+  /** 매번 새로 로드해 같은 초기 자세에서 잰다. 부호는 시선 변화를 기준 화면축에 투영한 값. */
   async function measure(
     page: Page,
-    axis: 'alpha' | 'beta',
+    axis: 'right' | 'up',
     act: () => Promise<void>,
   ): Promise<number> {
     await page.goto('/?fixture=cube.glb');
     expect(await waitForViewer(page)).toBe('ready');
-    const before = (await cameraAngles(page))[axis];
+    const before = await cameraAxes(page);
     await act();
     expect(await waitForIdle(page), '조작 후 멈추지 않았다').toBe(true);
-    return unwrap((await cameraAngles(page))[axis] - before);
+    const after = await cameraAxes(page);
+    return turnSign(before.forward, after.forward, before[axis]);
   }
 });

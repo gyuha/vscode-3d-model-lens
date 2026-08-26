@@ -7,7 +7,7 @@ import {
 } from '../../src/webview/viewerState';
 
 const sample: RestorableViewerState = {
-  camera: { alpha: 1.25, beta: 0.5, radius: 42, target: [1, 2, 3] },
+  camera: { orientation: [0, 0.3826834, 0, 0.9238795], radius: 42, target: [1, 2, 3] },
   measurements: [
     { a: [-5, -10, -15], b: [5, -10, -15] },
     { a: [0, 0, 0], b: [1, 1, 1] },
@@ -95,16 +95,28 @@ describe('restoreViewerState — 깨진 입력 방어', () => {
   it('카메라에 유한하지 않은 값이 있으면 카메라만 버리고 나머지는 살린다', () => {
     const broken = {
       ...serializeViewerState(sample),
-      camera: { alpha: Number.NaN, beta: 0.5, radius: 42, target: [1, 2, 3] },
+      camera: { orientation: [0, Number.NaN, 0, 1], radius: 42, target: [1, 2, 3] },
     };
     const restored = restoreViewerState(broken);
     expect(restored?.camera).toBeNull();
+  });
+
+  it('옛 alpha/beta 모양이 들어와도 카메라만 버리고 측정값은 지킨다 — 버전을 올리지 않은 이유다', () => {
+    const legacy = {
+      ...serializeViewerState(sample),
+      camera: { alpha: 1.25, beta: 0.5, radius: 42, target: [1, 2, 3] },
+    };
+    const restored = restoreViewerState(legacy);
+    expect(restored?.camera, '옛 카메라 모양이 통과했다').toBeNull();
+    expect(restored?.measurements, '카메라 때문에 측정값이 함께 버려졌다').toEqual(
+      sample.measurements,
+    );
     expect(restored?.measurements).toHaveLength(2);
   });
 
   it('카메라 target 이 3개 숫자가 아니면 카메라를 버린다', () => {
     for (const target of [[1, 2], [1, 2, 3, 4], ['a', 'b', 'c'], null, undefined, 5]) {
-      const broken = { ...serializeViewerState(sample), camera: { alpha: 1, beta: 1, radius: 1, target } };
+      const broken = { ...serializeViewerState(sample), camera: { orientation: [0, 0, 0, 1], radius: 1, target } };
       expect(restoreViewerState(broken)?.camera, JSON.stringify(target)).toBeNull();
     }
   });
