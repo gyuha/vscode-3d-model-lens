@@ -7,9 +7,11 @@ import {
   collectHostMessages,
   extents,
   isIdle,
+  PANEL_SECTIONS,
   readyMeshes,
   renderCount,
   sendHostMessage,
+  toggleSection,
   vertexTargets,
   waitForIdle,
   waitForViewer,
@@ -874,5 +876,114 @@ test.describe('연속 수직 회전', () => {
     ).toBeGreaterThan(0.05);
 
     expect(problems, `콘솔 경고: ${problems.join(' | ')}`).toEqual([]);
+  });
+});
+
+test.describe('패널 섹션 아코디언', () => {
+  test('처음 열면 세 섹션이 접혀 있고, 헤더를 클릭하면 그 섹션만 펼쳐진다', async ({ page }) => {
+    await page.goto('/?fixture=cube.stl');
+    // 접힘 상태 자체가 검사 대상이므로 헬퍼의 자동 펼치기를 끈다.
+    expect(await waitForViewer(page, { expandSections: false })).toBe('ready');
+
+    for (const name of PANEL_SECTIONS) {
+      await expect(page.locator(`#${name}-header`)).toHaveAttribute('aria-expanded', 'false');
+      await expect(page.locator(`#${name}-body`)).toBeHidden();
+    }
+    // 치수와 단위는 섹션이 아니므로 늘 보인다 — 접어서 숨길 수 있으면 안 된다.
+    await expect(page.locator('#dim-x')).toBeVisible();
+    await expect(page.locator('#unit')).toBeVisible();
+
+    await toggleSection(page, 'display');
+    await expect(page.locator('#display-header')).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator('#toggle-grid')).toBeVisible();
+    // 다른 섹션은 그대로 접혀 있다 — 하나만 열리는 배타 아코디언이 아니다.
+    await expect(page.locator('#measure-body')).toBeHidden();
+    await expect(page.locator('#debug-body')).toBeHidden();
+
+    await toggleSection(page, 'display');
+    await expect(page.locator('#display-header')).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.locator('#toggle-grid')).toBeHidden();
+  });
+
+  test('측정 모드를 켜면 MEASURE 가 자동으로 펼쳐진다 — 끌 때는 접지 않는다', async ({ page }) => {
+    await page.goto('/?fixture=cube.stl');
+    expect(await waitForViewer(page, { expandSections: false })).toBe('ready');
+    await expect(page.locator('#measure-body')).toBeHidden();
+
+    // 제목 표시줄 아이콘 경로. 이 경로로 켰을 때 섹션이 접혀 있으면 측정 목록이 보이지 않는다.
+    await sendHostMessage(page, { type: 'setMeasureMode', active: true });
+    await expect(page.locator('#measure-header')).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator('#measure-list')).toBeVisible();
+
+    await sendHostMessage(page, { type: 'setMeasureMode', active: false });
+    await expect(page.locator('#measure-header')).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  test('reload 후 펼쳐둔 섹션이 그대로 복원된다', async ({ page }) => {
+    await page.goto('/?fixture=cube.stl');
+    expect(await waitForViewer(page, { expandSections: false })).toBe('ready');
+
+    await toggleSection(page, 'debug');
+    await expect(page.locator('#debug-header')).toHaveAttribute('aria-expanded', 'true');
+    // 저장은 디바운스되므로 렌더를 한 번 유발해 flush 를 타게 한다.
+    await page.locator('#canvas').hover();
+    await page.waitForTimeout(700);
+
+    await page.reload();
+    expect(await waitForViewer(page, { expandSections: false })).toBe('ready');
+    await expect(page.locator('#root')).toHaveAttribute('data-restored', 'yes');
+    await expect(page.locator('#debug-header')).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator('#measure-header')).toHaveAttribute('aria-expanded', 'false');
+  });
+});
+
+test.describe('패널 숨기기', () => {
+  test('호스트가 숨기면 패널이 사라지고, 되살리면 접힘 상태를 유지한 채 돌아온다', async ({
+    page,
+  }) => {
+    await page.goto('/?fixture=cube.stl');
+    expect(await waitForViewer(page, { expandSections: false })).toBe('ready');
+    const messages = await collectHostMessages(page);
+
+    await toggleSection(page, 'display');
+    await sendHostMessage(page, { type: 'setPanelVisible', visible: false });
+    await expect(page.locator('#panel')).toBeHidden();
+    await expect(page.locator('#root')).toHaveAttribute('data-panel', 'hidden');
+    // 호스트에 알리지 않으면 다음 아이콘 클릭의 토글 방향이 뒤집힌다.
+    expect(await messages()).toContainEqual({ type: 'panelState', visible: false });
+
+    await sendHostMessage(page, { type: 'setPanelVisible', visible: true });
+    await expect(page.locator('#panel')).toBeVisible();
+    await expect(page.locator('#display-header')).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  test('숨긴 채 reload 하면 숨김 상태로 복원되고 호스트에 다시 알린다', async ({ page }) => {
+    await page.goto('/?fixture=cube.stl');
+    expect(await waitForViewer(page, { expandSections: false })).toBe('ready');
+
+    await sendHostMessage(page, { type: 'setPanelVisible', visible: false });
+    await expect(page.locator('#panel')).toBeHidden();
+    await page.locator('#canvas').hover();
+    await page.waitForTimeout(700);
+
+    // 복원 통보는 로드 중에 일어나므로 싱크를 문서 생성 전에 심어야 한다 —
+    // collectHostMessages 는 로드 후에 붙으므로 이 경로를 볼 수 없다.
+    await page.addInitScript(() => {
+      const sink: unknown[] = [];
+      (window as unknown as { __hostMessages: unknown[] }).__hostMessages = sink;
+      window.addEventListener('uat:tohost', (event) =>
+        sink.push((event as CustomEvent).detail),
+      );
+    });
+
+    await page.reload();
+    expect(await waitForViewer(page, { expandSections: false })).toBe('ready');
+    await expect(page.locator('#panel')).toBeHidden();
+    expect(
+      await page.evaluate(
+        () => (window as unknown as { __hostMessages: unknown[] }).__hostMessages,
+      ),
+      '복원이 알리지 않으면 session.panelVisible 이 true 로 남아 아이콘이 한 번 먹히지 않는다',
+    ).toContainEqual({ type: 'panelState', visible: false });
   });
 });

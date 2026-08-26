@@ -6,12 +6,54 @@ export interface Point3 {
   z: number;
 }
 
-/** 뷰어가 로드를 끝낼 때까지 기다린다. `error` 면 그대로 돌려주므로 호출부가 판단한다. */
-export async function waitForViewer(page: Page): Promise<'ready' | 'error'> {
+/**
+ * 뷰어가 로드를 끝낼 때까지 기다린다. `error` 면 그대로 돌려주므로 호출부가 판단한다.
+ *
+ * 로드가 끝나면 **패널 섹션을 전부 펼친다**. 섹션은 기본으로 접혀 있고 접힌 안의 요소는
+ * 클릭할 수 없는데, 이 헬퍼를 쓰는 테스트들이 주장하는 것은 아코디언이 아니라 그 안의
+ * 기능이기 때문이다. 접힘 상태 자체를 보려면 `expandSections: false` 로 끈다.
+ */
+export async function waitForViewer(
+  page: Page,
+  options: { expandSections?: boolean } = {},
+): Promise<'ready' | 'error'> {
   const state = await page
     .locator('#root[data-state]')
     .getAttribute('data-state', { timeout: 60_000 });
-  return state === 'error' ? 'error' : 'ready';
+  if (state === 'error') {
+    return 'error';
+  }
+  if (options.expandSections !== false) {
+    await expandAllSections(page);
+  }
+  return 'ready';
+}
+
+/** 접었다 펼 수 있는 패널 섹션. 애니메이션 섹션은 늘 펼쳐진 채 시작하므로 여기 없다. */
+export const PANEL_SECTIONS = ['measure', 'display', 'debug'] as const;
+export type PanelSection = (typeof PANEL_SECTIONS)[number];
+
+export async function isSectionExpanded(page: Page, name: PanelSection): Promise<boolean> {
+  return (await page.locator(`#${name}-header`).getAttribute('aria-expanded')) === 'true';
+}
+
+export async function toggleSection(page: Page, name: PanelSection): Promise<void> {
+  await page.locator(`#${name}-header`).click();
+}
+
+/**
+ * 모든 패널 섹션을 펼친다.
+ *
+ * 섹션은 기본으로 접혀 있고, 접힌 섹션 안의 요소는 클릭할 수 없다. 기존 테스트들이 주장하는
+ * 것은 **측정·배경·그리드의 동작**이지 아코디언이 아니므로, 각 테스트 본문에 펼치기 클릭을
+ * 심는 대신 여기서 한 번에 연다. 아코디언 자체는 전용 테스트가 검증한다.
+ */
+export async function expandAllSections(page: Page): Promise<void> {
+  for (const name of PANEL_SECTIONS) {
+    if (!(await isSectionExpanded(page, name))) {
+      await toggleSection(page, name);
+    }
+  }
 }
 
 export async function extents(page: Page): Promise<[number, number, number]> {

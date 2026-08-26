@@ -121,3 +121,43 @@ describe('buildWebviewHtml', () => {
     expect(config.decimals).toBe(5);
   });
 });
+
+describe('buildWebviewHtml — 패널 섹션', () => {
+  const html = buildWebviewHtml(params);
+
+  it('접히는 섹션 셋은 aria-expanded=false 로 시작한다 — 처음 열면 패널이 작다', () => {
+    for (const name of ['measure', 'display', 'debug']) {
+      const header = new RegExp(`id="${name}-header"[^>]*aria-expanded="false"`, 's');
+      expect(html).toMatch(header);
+      expect(html).toMatch(new RegExp(`id="${name}-body" hidden`));
+    }
+  });
+
+  it('애니메이션 섹션은 통째로 hidden 으로 시작한다 — 그룹이 있는 파일에서만 드러난다', () => {
+    expect(html).toMatch(/id="animation-section"[^>]*hidden/);
+    // 있으면 펼쳐진 채다 — 재생/일시정지를 한 단계 뒤에 두지 않는다.
+    expect(html).toMatch(/id="animation-header"[^>]*aria-expanded="true"/s);
+  });
+
+  it('섹션 헤더는 button 이라 키보드로 조작된다 — div 로 만들면 접근성이 끊긴다', () => {
+    for (const name of ['animation', 'measure', 'display', 'debug']) {
+      expect(html).toMatch(new RegExp(`<button type="button" class="section-header"\\s+id="${name}-header"`));
+    }
+  });
+
+  it('모서리 반경을 선언하지 않는다 — 각진 실루엣이 브랜드다', () => {
+    expect(html).not.toContain('border-radius');
+  });
+
+  it('M 트라이컬러는 정확히 두 곳에만 쓴다 — 패널 머리와 로딩', () => {
+    expect(html.match(/class="m-stripe"/g)).toHaveLength(2);
+  });
+
+  it('본문 굵기에 300 을 쓰지 않는다 — 11px 에서 대비를 만들지 못한다 (ADR 260826-094300)', () => {
+    expect(html).not.toMatch(/font-weight:\s*300/);
+  });
+
+  it('에러 화면의 가로줄은 트라이컬러가 아니라 M 레드 단색이다 — 실패는 브랜드 순간이 아니다', () => {
+    expect(html).toMatch(/#error \.rule[^}]*background:\s*#e22718/s);
+  });
+});

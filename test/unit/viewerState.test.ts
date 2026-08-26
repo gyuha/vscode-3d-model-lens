@@ -16,6 +16,8 @@ const sample: RestorableViewerState = {
   measureMode: true,
   toggles: { snap: false },
   animation: { playing: false, selection: 1 },
+  sections: { measure: true, display: false, debug: true },
+  panelHidden: true,
 };
 
 describe('serializeViewerState / restoreViewerState', () => {
@@ -165,5 +167,50 @@ describe('restoreViewerState — 깨진 입력 방어', () => {
     expect(restoreViewerState(broken)?.toggles).toEqual({
       snap: true,
     });
+  });
+});
+
+describe('restoreViewerState — 패널 섹션과 숨김', () => {
+  const withRaw = (patch: Record<string, unknown>): unknown => ({
+    ...serializeViewerState(sample),
+    ...patch,
+  });
+
+  it('섹션 접힘과 패널 숨김을 왕복시킨다', () => {
+    const round = restoreViewerState(JSON.parse(JSON.stringify(serializeViewerState(sample))));
+    expect(round?.sections).toEqual({ measure: true, display: false, debug: true });
+    expect(round?.panelHidden).toBe(true);
+  });
+
+  it('섹션 필드가 없는 예전 상태도 나머지를 살려 복원한다 — 버전을 올리지 않았다', () => {
+    const raw = { ...serializeViewerState(sample) } as unknown as Record<string, unknown>;
+    delete raw.sections;
+    delete raw.panelHidden;
+
+    const round = restoreViewerState(raw);
+    // 카메라와 측정이 살아남는 것이 핵심이다 — 버전을 올렸다면 전부 버려졌을 것이다.
+    expect(round?.camera).toEqual(sample.camera);
+    expect(round?.measurements).toHaveLength(2);
+    expect(round?.sections).toEqual({ measure: false, display: false, debug: false });
+    expect(round?.panelHidden).toBe(false);
+  });
+
+  it('섹션 값이 불리언이 아니면 그 섹션만 기본값(접힘)으로 떨어진다', () => {
+    const round = restoreViewerState(
+      withRaw({ sections: { measure: 'yes', display: true, debug: null } }),
+    );
+    expect(round?.sections).toEqual({ measure: false, display: true, debug: false });
+  });
+
+  it('sections 가 객체가 아니면 전부 접힘으로 본다', () => {
+    expect(restoreViewerState(withRaw({ sections: [1, 2] }))?.sections).toEqual({
+      measure: false,
+      display: false,
+      debug: false,
+    });
+  });
+
+  it('panelHidden 이 불리언이 아니면 숨기지 않는다 — 되살릴 길을 잃지 않게', () => {
+    expect(restoreViewerState(withRaw({ panelHidden: 'true' }))?.panelHidden).toBe(false);
   });
 });

@@ -69,15 +69,18 @@ void boot();
 
 async function boot(): Promise<void> {
   try {
+    // 제목과 파일명은 HTML 에 이미 있다 — 여기서는 진행률 줄만 채운다. `loading` 자체의
+    // textContent 를 쓰면 M 스트라이프와 제목까지 지워진다.
+    const loadingProgress = requireElement<HTMLDivElement>('loading-progress');
     const viewer = await createViewer(canvas, labelHost, config, restored?.camera ?? null, (ratio) => {
-      loading.textContent =
-        ratio === undefined
-          ? 'Loading model…'
-          : `Loading model… ${Math.round(ratio * 100)}%`;
+      loadingProgress.textContent = ratio === undefined ? '' : `${Math.round(ratio * 100)}%`;
     });
 
     loading.hidden = true;
-    panel.hidden = false;
+    // 복원 경로도 호스트에 알린다 — 알리지 않으면 패널을 숨긴 채 탭을 떠났다 돌아왔을 때
+    // 아이콘이 한 번 먹히지 않는다 (`applyMeasureMode` 와 같은 함정).
+    applyPanelVisible(!(restored?.panelHidden ?? false));
+    wireSections(restored?.sections);
     wirePanel(viewer.chrome, viewer);
 
     // 뷰어 상태를 DOM 에 노출한다 — 자동 검증(헤드리스 렌더 테스트)이 붙을 지점이고,
@@ -120,6 +123,46 @@ async function boot(): Promise<void> {
     window.addEventListener('unload', () => viewer.dispose(), { once: true });
   } catch (error) {
     showError(error);
+  }
+}
+
+/**
+ * 접었다 펼 수 있는 패널 섹션의 이름. 치수와 모델 단위는 늘 열려 있는 머리이므로 섹션이 아니다.
+ *
+ * `animation` 이 목록에 없는 이유: 그 섹션은 그룹이 있는 파일에서만 존재하고, 있으면 늘 펼쳐진
+ * 채 시작한다 — 접힘 상태를 저장할 것이 없다.
+ */
+const PANEL_SECTIONS = ['measure', 'display', 'debug'] as const;
+export type PanelSectionName = (typeof PANEL_SECTIONS)[number];
+
+/**
+ * 패널 섹션을 펼치거나 접는다.
+ *
+ * 접힘은 `hidden` 속성으로 표현한다 — CSS 클래스가 아니라 속성이어야 자동 검증(Playwright)의
+ * 가시성 판정과 접근성 트리가 함께 따라온다. `aria-expanded` 는 헤더 버튼이 들고 있다.
+ */
+function setSectionExpanded(name: PanelSectionName, expanded: boolean): void {
+  const header = requireElement<HTMLButtonElement>(`${name}-header`);
+  const body = requireElement<HTMLDivElement>(`${name}-body`);
+  header.setAttribute('aria-expanded', String(expanded));
+  body.hidden = !expanded;
+  const chevron = header.querySelector<HTMLSpanElement>('.chevron');
+  if (chevron) {
+    chevron.textContent = expanded ? '▾' : '▸';
+  }
+}
+
+function isSectionExpanded(name: PanelSectionName): boolean {
+  return requireElement<HTMLButtonElement>(`${name}-header`).getAttribute('aria-expanded') === 'true';
+}
+
+/** 섹션 헤더를 클릭·키보드로 조작할 수 있게 한다. `<button>` 이므로 Enter/Space 는 공짜다. */
+function wireSections(restoredSections: Record<PanelSectionName, boolean> | undefined): void {
+  for (const name of PANEL_SECTIONS) {
+    setSectionExpanded(name, restoredSections?.[name] ?? false);
+    requireElement<HTMLButtonElement>(`${name}-header`).addEventListener('click', () => {
+      setSectionExpanded(name, !isSectionExpanded(name));
+    });
   }
 }
 
@@ -213,6 +256,13 @@ function wireStatePersistence(viewer: Viewer): void {
     toggles: {
       snap: isChecked('toggle-snap'),
     },
+    sections: {
+      measure: isSectionExpanded('measure'),
+      display: isSectionExpanded('display'),
+      debug: isSectionExpanded('debug'),
+    },
+    // `hidden` 은 최신 DOM 타입에서 `boolean | "until-found"` 이므로 좁혀서 담는다.
+    panelHidden: Boolean(panel.hidden),
   });
 
   const flush = (): void => {
@@ -355,8 +405,7 @@ function wireBackgroundPanel(): void {
  * 섹션 자체를 숨긴 채로 둔다.
  */
 function wireAnimationPanel(viewer: Viewer): void {
-  const row = requireElement<HTMLDivElement>('animation-row');
-  const separator = requireElement<HTMLHRElement>('animation-sep');
+  const section = requireElement<HTMLElement>('animation-section');
   const toggle = requireElement<HTMLButtonElement>('animation-toggle');
   const select = requireElement<HTMLSelectElement>('animation-select');
   const { animations } = viewer;
@@ -392,8 +441,9 @@ function wireAnimationPanel(viewer: Viewer): void {
   };
   animations.onChange();
 
-  row.hidden = false;
-  separator.hidden = false;
+  // 그룹이 있는 파일에서만 섹션이 존재하고, 있으면 펼쳐진 채로 시작한다 —
+  // 재생/일시정지는 자주 누르는 버튼이라 한 단계 뒤에 두지 않는다.
+  section.hidden = false;
 }
 
 /** 확장 호스트의 명령(제목 표시줄 아이콘 · 명령 팔레트)을 받는다. */
@@ -417,6 +467,10 @@ function wireHostMessages(viewer: Viewer): void {
       applyMeasureMode(viewer, message.active);
       return;
     }
+    if (message?.type === 'setPanelVisible') {
+      applyPanelVisible(message.visible);
+      return;
+    }
     if (message?.type !== 'setInspector') {
       return;
     }
@@ -438,9 +492,29 @@ function wireHostMessages(viewer: Viewer): void {
  */
 function applyMeasureMode(viewer: Viewer, active: boolean): void {
   setChecked('toggle-measure', active);
+  // 켤 때는 MEASURE 섹션을 펼친다 — 제목 표시줄 아이콘으로 켠 경우 섹션이 접혀 있으면 찍은
+  // 측정 목록이 보이지 않는다. 끌 때는 접지 않는다: 사용자가 펼쳐둔 것을 빼앗지 않는다.
+  if (active) {
+    setSectionExpanded('measure', true);
+  }
   // 켤 때의 애니메이션 정지와 재렌더는 `viewer.setMeasureMode` 안에서 일어난다.
   viewer.setMeasureMode(active);
   post({ type: 'measureModeState', active });
+}
+
+/**
+ * 뷰어 패널을 통째로 보이거나 숨긴다 — 제목 표시줄 아이콘과 탭 복원의 **공통 경로**.
+ *
+ * 되살리는 경로를 웹뷰 **밖**(제목 표시줄)에 둔 이유: 웹뷰 안에 되살릴 버튼을 남기면 뷰포트를
+ * 완전히 비울 수 없다. 그래서 숨김 상태에는 화면에 아무것도 남지 않는다.
+ *
+ * `applyInspector`·`applyMeasureMode` 와 같은 이유로 호스트에 현재 상태를 알린다 — 호스트가
+ * `session.panelVisible` 로만 상태를 알고, 어긋나면 다음 아이콘 클릭의 토글 방향이 뒤집힌다.
+ */
+function applyPanelVisible(visible: boolean): void {
+  panel.hidden = !visible;
+  root.dataset.panel = visible ? 'visible' : 'hidden';
+  post({ type: 'panelState', visible });
 }
 
 /**

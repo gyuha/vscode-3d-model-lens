@@ -14,6 +14,7 @@ interface ViewerSession {
   documentUri: vscode.Uri;
   inspectorVisible: boolean;
   measureActive: boolean;
+  panelVisible: boolean;
 }
 
 export class ModelLensViewerProvider implements vscode.CustomReadonlyEditorProvider {
@@ -74,6 +75,8 @@ export class ModelLensViewerProvider implements vscode.CustomReadonlyEditorProvi
       documentUri: document.uri,
       inspectorVisible: false,
       measureActive: false,
+      // 패널은 보인 채로 시작한다. 웹뷰가 복원한 숨김 상태는 `panelState` 로 곧 따라온다.
+      panelVisible: true,
     };
     this.sessions.add(session);
     webviewPanel.onDidDispose(() => this.sessions.delete(session));
@@ -94,6 +97,9 @@ export class ModelLensViewerProvider implements vscode.CustomReadonlyEditorProvi
           break;
         case 'measureModeState':
           session.measureActive = message.active;
+          break;
+        case 'panelState':
+          session.panelVisible = message.visible;
           break;
         case 'unitChanged':
           // 파일별로 기억한다 — STL 은 단위가 없어서 매번 다시 고르게 되기 때문이다.
@@ -177,6 +183,22 @@ export class ModelLensViewerProvider implements vscode.CustomReadonlyEditorProvi
     const next = !session.measureActive;
     await this.send(session, { type: 'setMeasureMode', active: next });
     await waitFor(() => session.measureActive === next, 5_000);
+  }
+
+  /**
+   * 활성 탭의 뷰어 패널을 통째로 숨기거나 되살린다.
+   *
+   * 되살리는 경로가 웹뷰 밖(이 명령)에 있어야 뷰포트를 완전히 비울 수 있다 — 웹뷰 안에
+   * 되살릴 버튼을 남기면 모델만 보고 싶을 때도 무언가가 계속 떠 있게 된다.
+   */
+  public async togglePanel(): Promise<void> {
+    const session = this.activeSession('The viewer panel');
+    if (!session) {
+      return;
+    }
+    const next = !session.panelVisible;
+    await this.send(session, { type: 'setPanelVisible', visible: next });
+    await waitFor(() => session.panelVisible === next, 5_000);
   }
 
   private activeSession(what: string): ViewerSession | undefined {

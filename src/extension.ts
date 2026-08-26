@@ -15,6 +15,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('modelLens.toggleMeasureMode', () =>
       provider.toggleMeasureMode(),
     ),
+    vscode.commands.registerCommand('modelLens.togglePanel', () => provider.togglePanel()),
   );
 }
 

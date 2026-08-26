@@ -46,6 +46,16 @@ export interface TogglesState {
   snap: boolean;
 }
 
+/**
+ * 접을 수 있는 패널 섹션의 펼침 여부. 애니메이션 섹션은 여기 없다 — 그룹이 있는 파일에서만
+ * 존재하고 있으면 늘 펼쳐진 채 시작하므로 저장할 것이 없다.
+ */
+export interface SectionsState {
+  measure: boolean;
+  display: boolean;
+  debug: boolean;
+}
+
 export interface RestorableViewerState {
   camera: CameraState | null;
   measurements: MeasurementState[];
@@ -53,6 +63,10 @@ export interface RestorableViewerState {
   measureMode: boolean;
   toggles: TogglesState;
   animation: AnimationState | null;
+  /** 패널 섹션의 펼침 상태. */
+  sections: SectionsState;
+  /** 뷰어 패널을 통째로 숨겼는지. `modelLens.togglePanel` 이 바꾼다. */
+  panelHidden: boolean;
 }
 
 export interface PersistedViewerState extends RestorableViewerState {
@@ -60,6 +74,9 @@ export interface PersistedViewerState extends RestorableViewerState {
 }
 
 const DEFAULT_TOGGLES: TogglesState = { snap: true };
+
+/** 처음 열었을 때는 세 섹션 모두 접혀 있다 — 패널이 치수 + 단위만큼만 크다. */
+const DEFAULT_SECTIONS: SectionsState = { measure: false, display: false, debug: false };
 
 export function serializeViewerState(state: RestorableViewerState): PersistedViewerState {
   return { version: VIEWER_STATE_VERSION, ...state };
@@ -81,6 +98,26 @@ export function restoreViewerState(raw: unknown): RestorableViewerState | undefi
     measureMode: raw.measureMode === true,
     toggles: readToggles(raw.toggles),
     animation: readAnimation(raw.animation),
+    sections: readSections(raw.sections),
+    panelHidden: raw.panelHidden === true,
+  };
+}
+
+/**
+ * 패널 섹션의 펼침 상태를 읽는다.
+ *
+ * **여기서도 버전은 올리지 않는다** — `readAnimation` 과 같은 이유다. 올리면 버전 불일치로
+ * 복원이 통째로 버려져, 이 확장을 업데이트한 사용자의 열려 있는 탭에서 카메라와 측정까지
+ * 사라진다. 필드가 없는 예전 상태는 여기서 기본값(전부 접힘)이 되고 나머지는 살아남는다.
+ */
+function readSections(raw: unknown): SectionsState {
+  if (!isRecord(raw)) {
+    return { ...DEFAULT_SECTIONS };
+  }
+  return {
+    measure: readBoolean(raw.measure, DEFAULT_SECTIONS.measure),
+    display: readBoolean(raw.display, DEFAULT_SECTIONS.display),
+    debug: readBoolean(raw.debug, DEFAULT_SECTIONS.debug),
   };
 }
 

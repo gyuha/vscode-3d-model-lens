@@ -140,6 +140,12 @@
         "title": "Toggle Measure Mode",
         "category": "3D Model Lens",
         "icon": "$(gist)"
+      },
+      {
+        "command": "modelLens.togglePanel",
+        "title": "Toggle Viewer Panel",
+        "category": "3D Model Lens",
+        "icon": "$(layout-sidebar-right)"
       }
     ],
     "menus": {
@@ -153,6 +159,11 @@
           "command": "modelLens.toggleInspector",
           "when": "activeCustomEditorId == 'modelLens.viewer'",
           "group": "navigation@1"
+        },
+        {
+          "command": "modelLens.togglePanel",
+          "when": "activeCustomEditorId == 'modelLens.viewer'",
+          "group": "navigation@2"
         }
       ],
       "commandPalette": [
@@ -162,6 +173,10 @@
         },
         {
           "command": "modelLens.toggleMeasureMode",
+          "when": "activeCustomEditorId == 'modelLens.viewer'"
+        },
+        {
+          "command": "modelLens.togglePanel",
           "when": "activeCustomEditorId == 'modelLens.viewer'"
         }
       ]
