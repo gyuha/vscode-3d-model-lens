@@ -987,3 +987,83 @@ test.describe('패널 숨기기', () => {
     ).toContainEqual({ type: 'panelState', visible: false });
   });
 });
+
+test.describe('방향키 회전 방향', () => {
+  // 어느 쪽이 "옳은" 방향인지 박아 넣지 않는다 — **마우스와 같은 방향인지**만 단정한다.
+  // Babylon 기본값은 둘이 반대다: 마우스는 `-offsetX`, 키보드 오른쪽 키는 `+1`.
+  //
+  // **회전량을 작게 유지하는 것이 이 테스트의 전제다.** 수직 회전 한계를 제거했으므로 각도는
+  // `(-180°, 180°]` 로 감긴다 — 큰 회전에서는 `after - before` 의 부호가 감김에 오염되어
+  // 우연히 통과할 수 있다. 그래서 짧게 움직이고, 언랩한 뒤, 감기지 않았음을 함께 단정한다.
+  const SMALL = 0.02; // rad — 이보다 작으면 입력이 먹지 않은 것
+  const NO_WRAP = 2.5; // rad — 이보다 크면 감겼을 수 있어 부호를 믿을 수 없다
+
+  const unwrap = (delta: number): number => Math.atan2(Math.sin(delta), Math.cos(delta));
+  const deg = (v: number): string => ((v * 180) / Math.PI).toFixed(2) + 'deg';
+
+  const CASES = [
+    { key: 'ArrowRight', axis: 'alpha' as const, drag: { dx: 1, dy: 0 }, label: '오른쪽' },
+    { key: 'ArrowDown', axis: 'beta' as const, drag: { dx: 0, dy: 1 }, label: '아래' },
+  ];
+
+  for (const { key, axis, drag, label } of CASES) {
+    test(`${label} 방향키와 ${label} 드래그가 같은 방향으로 돈다`, async ({ page }) => {
+      const problems = collectConsoleProblems(page);
+
+      const keyDelta = await measure(page, axis, async () => {
+        await page.locator('#canvas').focus();
+        await page.keyboard.down(key);
+        await page.waitForTimeout(120);
+        await page.keyboard.up(key);
+      });
+
+      const dragDelta = await measure(page, axis, async () => {
+        const box = await page.locator('#canvas').boundingBox();
+        if (!box) {
+          return;
+        }
+        const cx = box.x + box.width / 2;
+        const cy = box.y + box.height / 2;
+        const span = Math.min(box.width, box.height) * 0.08;
+        await page.mouse.move(cx, cy);
+        await page.mouse.down();
+        for (let i = 1; i <= 5; i++) {
+          await page.mouse.move(cx + (drag.dx * span * i) / 5, cy + (drag.dy * span * i) / 5);
+        }
+        await page.mouse.up();
+      });
+
+      for (const [what, delta] of [
+        ['키', keyDelta],
+        ['드래그', dragDelta],
+      ] as const) {
+        expect(Math.abs(delta), `${label} ${what}가 카메라를 움직이지 않았다`).toBeGreaterThan(SMALL);
+        expect(
+          Math.abs(delta),
+          `${label} ${what}의 회전량이 너무 커서 감김 여부를 믿을 수 없다 (${deg(delta)})`,
+        ).toBeLessThan(NO_WRAP);
+      }
+
+      expect(
+        Math.sign(keyDelta),
+        `${label} 키와 ${label} 드래그가 반대로 돈다 — 키 ${deg(keyDelta)} / 드래그 ${deg(dragDelta)}`,
+      ).toBe(Math.sign(dragDelta));
+
+      expect(problems, `콘솔 경고: ${problems.join(' | ')}`).toEqual([]);
+    });
+  }
+
+  /** 매번 새로 로드해 같은 초기 상태에서 잰다 — 앞선 조작이 누적되면 감김에 걸린다. */
+  async function measure(
+    page: Page,
+    axis: 'alpha' | 'beta',
+    act: () => Promise<void>,
+  ): Promise<number> {
+    await page.goto('/?fixture=cube.glb');
+    expect(await waitForViewer(page)).toBe('ready');
+    const before = (await cameraAngles(page))[axis];
+    await act();
+    expect(await waitForIdle(page), '조작 후 멈추지 않았다').toBe(true);
+    return unwrap((await cameraAngles(page))[axis] - before);
+  }
+});

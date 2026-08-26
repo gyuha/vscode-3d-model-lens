@@ -5,6 +5,16 @@ All notable changes to the **3D Model Lens** extension are documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-08-26
+
+### Fixed
+
+- **Arrow keys rotated the opposite way from dragging** — on both axes. Babylon accumulates a mouse
+  drag as `-offsetX` but a right-arrow press as `+1`, so the right arrow orbited as if you had dragged
+  left, and the down arrow as if you had dragged up. Arrow-key rotation now matches dragging.
+  Panning (Ctrl) and zooming (Alt) are untouched: the key arrays are shared by all three, so the
+  correction inverts only the rotation the keyboard contributed, not the shared key mapping.
+
 ## [0.2.0] - 2026-08-26
 
 ### Added

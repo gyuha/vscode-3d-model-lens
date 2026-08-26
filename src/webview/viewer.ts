@@ -18,6 +18,7 @@ import type { CameraState } from './viewerState.js';
 import { createAnimationController, type AnimationController } from './animation.js';
 import { Chrome, ensureMaterials } from './chrome.js';
 import { computeExtents, extentDiagonal, type Extents } from './geometry.js';
+import { InvertedKeyboardRotateInput } from './cameraKeys.js';
 import { applyHandednessFix } from './handedness.js';
 import { MeasurementTool } from './measurement.js';
 import { RenderGate } from './renderGate.js';
@@ -285,6 +286,10 @@ function createCamera(
     Vector3.Zero(),
     scene,
   );
+  // 기본 키보드 입력을 방향이 뒤집힌 것으로 갈아 끼운다 — 이유는 cameraKeys.ts 주석 참조.
+  // `attachControl` 보다 앞에서 해야 새 입력이 함께 붙는다.
+  camera.inputs.removeByType('ArcRotateCameraKeyboardMoveInput');
+  camera.inputs.add(new InvertedKeyboardRotateInput());
   camera.attachControl(canvas, true);
   camera.wheelDeltaPercentage = 0.02;
   camera.pinchDeltaPercentage = 0.02;
