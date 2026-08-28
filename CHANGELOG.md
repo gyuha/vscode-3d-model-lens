@@ -5,6 +5,37 @@ All notable changes to the **3D Model Lens** extension are documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-08-29
+
+### Added
+
+- **A navigation cube in the top-left corner.** It shows which way the camera is currently facing,
+  and clicking it moves the camera there: the six labelled faces (`TOP`/`FRONT`/`RIGHT`/…) and the
+  eight corners are click targets, and the camera slides to that view over 300ms rather than jumping.
+  Because every destination has zero roll, clicking any face other than `TOP`/`BOTTOM` also levels a
+  tilted view — the "return to level" the free-pose camera has been missing since 0.3.0.
+- **Four direction arrows around the cube** rotate the view 90° about the screen axes, following the
+  same sign convention as dragging and the arrow keys. They exist because the cube alone cannot reach
+  a neighbouring face: once a face is head-on, the four faces beside it are exactly edge-on and stop
+  being click targets.
+- **A home button** to the lower right of the cube restores the initial framing — orientation, distance and target.
+- **An RGB axis triad** shows where world X/Y/Z point. The letters are drawn next to the lines, so the
+  axes stay identifiable without relying on colour.
+
+### Changed
+
+- **The starting view now shows the model's front.** It used to sit behind the model — the camera was
+  on the `-Z` side, so the navigation cube would have opened reading `BACK`. The azimuth now splits
+  `FRONT` and `RIGHT` evenly; the elevation is unchanged.
+
+### Fixed
+
+- **Zooming or panning during a camera transition no longer strands the view part-way.** Wheel zoom,
+  right-drag pan and the modifier arrow keys were cancelling the whole transition rather than just the
+  inertia tail, so a cube click followed by a scroll stopped at an arbitrary angle (measured: 40.63°
+  short of the target). They now stop only the inertia; anything that actually takes over the
+  orientation still cancels the transition, as before.
+
 ## [0.3.1] - 2026-08-28
 
 ### Fixed
