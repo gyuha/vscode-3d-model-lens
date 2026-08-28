@@ -4,6 +4,7 @@ import { formatLength, isUnitSetting, resolveUnit, type UnitSetting } from '../u
 import type { Chrome } from './chrome.js';
 import { extentSizes } from './geometry.js';
 import type { MeasurementTool } from './measurement.js';
+import { createNavCube } from './navCube.js';
 import { createViewer, type Viewer, type ViewerConfig } from './viewer.js';
 import {
   restoreViewerState,
@@ -17,6 +18,7 @@ const panel = requireElement<HTMLDivElement>('panel');
 const loading = requireElement<HTMLDivElement>('loading');
 const errorBox = requireElement<HTMLDivElement>('error');
 const labelHost = requireElement<HTMLDivElement>('labels');
+const navCubeBox = requireElement<HTMLDivElement>('nav-cube');
 
 declare function acquireVsCodeApi(): {
   postMessage(message: unknown): void;
@@ -56,12 +58,18 @@ applyBackground(config.background);
 /**
  * 배경 모드를 실제 색으로 적용한다.
  *
- * `theme` 이면 인라인 스타일을 **지운다** — CSS 의 `--vscode-editor-background` 가 다시
- * 드러나야 하기 때문이다. 그냥 두면 이전 모드의 색이 남아 테마 따르기가 깨진다.
+ * `theme` 이면 선언을 **지운다** — CSS 의 `--vscode-editor-background` 폴백이 다시 드러나야
+ * 하기 때문이다. 그냥 두면 이전 모드의 색이 남아 테마 따르기가 깨진다(빈 문자열을 넘기면
+ * CSSOM 이 선언을 제거한다).
+ *
+ * **색을 커스텀 속성 하나에 담는 이유**: 바탕색을 쓰는 곳이 `body` 배경 하나가 아니다 — 축
+ * 삼각대의 X/Y/Z 문자가 **그 색으로 헤일로**를 깔아 축 선이 글리프를 가로지르지 못하게 한다
+ * (`webviewHtml.ts` 의 `.triad-label`). `--vscode-editor-background` 를 직접 쓰면 배경을
+ * `light`/`dark` 로 고정한 사용자에게 헤일로만 테마 색으로 남아 얼룩이 된다.
  */
 function applyBackground(mode: BackgroundMode): void {
   const color = backgroundColorFor(mode);
-  document.body.style.background = color ?? '';
+  document.body.style.setProperty('--model-lens-backdrop', color ?? '');
   root.dataset.background = mode;
 }
 
@@ -82,6 +90,7 @@ async function boot(): Promise<void> {
     applyPanelVisible(!(restored?.panelHidden ?? false));
     wireSections(restored?.sections);
     wirePanel(viewer.chrome, viewer);
+    wireNavCube(viewer);
 
     // 뷰어 상태를 DOM 에 노출한다 — 자동 검증(헤드리스 렌더 테스트)이 붙을 지점이고,
     // 파트 3/4 의 치수·측정 단정도 여기를 읽는다.
@@ -188,6 +197,44 @@ function wirePanel(chrome: Chrome, viewer: Viewer): void {
   requireElement<HTMLInputElement>('toggle-inspector').addEventListener('change', (event) => {
     applyInspector(viewer, (event.target as HTMLInputElement).checked);
   });
+}
+
+/**
+ * 내비게이션 큐브를 붙인다.
+ *
+ * 다시 그리는 시점을 `onAfterRenderObservable` 에 얹는다 — 카메라가 바뀌면 렌더 게이트가 이미
+ * 프레임을 그리고 있고 유휴에서는 그리지 않으므로, **큐브의 갱신 주기가 씬과 정확히 같아진다.**
+ * 큐브 전용 타이머도, 자세 변화를 따로 감시하는 배관도 필요 없다.
+ */
+function wireNavCube(viewer: Viewer): void {
+  const cube = createNavCube(navCubeBox, {
+    orientation: () => viewer.cameraOrientation(),
+    // 화살표 전용 — 보간 중이면 **가려던 자세**를 준다. 그리는 것은 위 `orientation()` 이다.
+    destinationOrientation: () => viewer.cameraDestinationOrientation(),
+    animateTo: (orientation) => {
+      // **포커스를 캔버스로 되돌린다.** SVG `path` 는 focusable 이 아니므로 큐브 클릭이
+      // `#canvas`(tabindex=0)의 포커스를 `<body>` 로 흘려보내고, 방향키를 **캔버스에서** 듣는
+      // `cameraInput` 이 더는 이벤트를 받지 못한다. 실측: 큐브 `+Y` 클릭 후 ArrowRight 200ms 의
+      // 시선 변화량이 0.0000 이었고, 캔버스를 다시 클릭하면 1.83 로 회복했다. 큐브는 설정
+      // 표면이 아니라 **카메라 조작기**라 "큐브로 면을 보고 방향키로 미세 조정"이 기본 흐름이다.
+      //
+      // 큐브가 아니라 여기서 하는 이유: 큐브는 캔버스를 모르는 채로 둔다(ADR `260828-204140` —
+      // 오버레이는 씬도 캔버스도 건드리지 않는다). 이 콜백이 둘이 만나는 유일한 자리다.
+      canvas.focus();
+      viewer.animateCameraTo(orientation);
+    },
+    // 홈 버튼 — 회전·줌·팬을 한 번에 첫 상태로 되돌린다. `resetView()` 가 `orbit.frame(extents)`
+    // 하나이고 그것이 **첫 로드와 같은 코드 경로**이므로(`createCamera`) 되돌린 값이 첫 값과
+    // 정확히 같다. 포커스를 되돌리는 것은 위와 같은 이유다 — 이 콜백도 SVG `path` 의 클릭에서
+    // 오므로 그냥 두면 방향키가 죽는다.
+    resetView: () => {
+      canvas.focus();
+      viewer.resetView();
+    },
+  });
+  viewer.scene.onAfterRenderObservable.add(() => cube.render());
+  // 첫 그림. 로드 직후의 자세는 이미 정해져 있으므로 첫 프레임을 기다리지 않는다.
+  cube.render();
 }
 
 /**
@@ -510,11 +557,15 @@ function applyMeasureMode(viewer: Viewer, active: boolean): void {
  * 되살리는 경로를 웹뷰 **밖**(제목 표시줄)에 둔 이유: 웹뷰 안에 되살릴 버튼을 남기면 뷰포트를
  * 완전히 비울 수 없다. 그래서 숨김 상태에는 화면에 아무것도 남지 않는다.
  *
+ * **내비게이션 큐브도 함께 숨는다** — 그 성질("화면에 아무것도 남지 않는다")은 조작기 하나가
+ * 남아도 깨진다. 새 지속 상태는 만들지 않고 이미 저장되는 `panelHidden` 을 그대로 쓴다.
+ *
  * `applyInspector`·`applyMeasureMode` 와 같은 이유로 호스트에 현재 상태를 알린다 — 호스트가
  * `session.panelVisible` 로만 상태를 알고, 어긋나면 다음 아이콘 클릭의 토글 방향이 뒤집힌다.
  */
 function applyPanelVisible(visible: boolean): void {
   panel.hidden = !visible;
+  navCubeBox.hidden = !visible;
   root.dataset.panel = visible ? 'visible' : 'hidden';
   post({ type: 'panelState', visible });
 }

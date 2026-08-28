@@ -5,7 +5,7 @@ A VS Code extension for viewing 3D models and **reading their size honestly**. B
 Open a `.gltf`, `.glb` or `.stl` file and the viewer opens in place — bounding box up front, distances on
 demand, and nothing invented along the way.
 
-![Measuring a model: bounding box, four distances with vertex snap, and the viewer panel](images/screen-01.png)
+![Measuring a model: the navigation cube, bounding box, two distances with vertex snap, and the viewer panel](images/screen-01.png)
 
 ## Supported formats
 
@@ -50,6 +50,19 @@ mode — movement past a threshold does not place a measurement point.
 - You can measure while the Inspector is open.
 
 Angles, surface area, and volume are not supported — see [deliberate omissions](#what-this-extension-does-not-do).
+
+## Navigation
+
+Drag to orbit, right-drag to pan, scroll to zoom. Arrow keys do the same as dragging, with `Alt` for zoom
+and `Ctrl`/`Cmd` for pan.
+
+The **navigation cube** in the top-left corner shows which way you are looking and takes you somewhere in
+one click. Its six labelled faces and eight corners are click targets; the four arrows around it turn the
+view 90° at a time, and the small button at its lower right returns to the opening view. Every destination arrives level,
+so clicking a face is also how you straighten a tilted view.
+
+At the cube's lower left, a small **X/Y/Z triad** points along the world axes — the same axes the dimensions above are
+labelled with. The letters are drawn on the lines, so the axes stay readable without relying on their colours.
 
 ## Inspector
 

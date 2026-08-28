@@ -7,6 +7,7 @@ import { LoadAssetContainerAsync } from '@babylonjs/core/Loading/sceneLoader.js'
 import { CubeTextureCreateFromPrefilteredData } from '@babylonjs/core/Materials/Textures/cubeTexture.pure.js';
 import { Color4 } from '@babylonjs/core/Maths/math.color.js';
 import { Matrix, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
+import type { Quaternion } from '@babylonjs/core/Maths/math.vector.js';
 import { Viewport } from '@babylonjs/core/Maths/math.viewport.js';
 import { Scene } from '@babylonjs/core/scene.js';
 import type { AbstractMesh } from '@babylonjs/core/Meshes/abstractMesh.js';
@@ -62,6 +63,16 @@ export interface Viewer {
   cameraState: () => CameraState;
   /** 시선·화면축. 회전이 어디로 갔는지 보는 관측점이며 회전을 유발하지 않는다. */
   cameraAxes: () => { forward: Triple; up: Triple; right: Triple };
+  /** 내비게이션 큐브가 읽는 카메라 자세. 큐브는 이 값 하나로 전부 그려진다. */
+  cameraOrientation: () => Quaternion;
+  /**
+   * 보간이 끝나면 도달할 자세 — 보간 중이 아니면 `cameraOrientation()` 과 같다.
+   * 큐브의 **화살표**가 여기에 90° 를 더한다(목적지가 상대값이므로 보간 중인 자세를 읽으면
+   * 남은 각도가 버려진다 — `OrbitCamera.destinationOrientationValue` 의 실측 주석).
+   */
+  cameraDestinationOrientation: () => Quaternion;
+  /** 자세를 [[정규 자세]] 로 부드럽게 옮긴다 — 내비게이션 큐브의 면·꼭짓점 클릭이 쓴다. */
+  animateCameraTo: (orientation: Quaternion) => void;
   extents: Extents;
   meshes: AbstractMesh[];
   resetView: () => void;
@@ -193,7 +204,14 @@ export async function createViewer(
     // 관성 꼬리와 눌려 있는 방향키를 한 프레임 진행한다. 둘 중 하나라도 움직이면 계속 그린다 —
     // 이게 없으면 손을 뗀 뒤의 감쇠와 키를 누르고 있는 동안의 회전이 첫 프레임에서 멈춘다.
     // (pan 속도를 radius 에 비례시키는 보정은 cameraInput.ts 가 매 이벤트마다 계산한다.)
-    if (orbit.tick() || input.tickKeys()) {
+    // **둘을 항상 다 부른다 — `||` 로 묶으면 단축 평가가 키 입력을 삼킨다.** 자세 보간이
+    // 도는 동안 `orbit.tick()` 이 `true` 라서 `tickKeys()` 가 아예 호출되지 않았고, 그 300ms
+    // 동안 Alt(줌)·Ctrl(팬) 방향키가 조용히 무시됐다(실측: 큐브 면 클릭 80ms 뒤 Alt+방향키를
+    // 60ms 눌러도 거리 배율이 정확히 1.0000). 휠·우드래그는 이벤트에서 바로 적용되므로 같은
+    // 구멍이 없다 — 키만 프레임 기반이라 이 자리를 지난다.
+    const animating = orbit.tick();
+    const keys = input.tickKeys();
+    if (animating || keys) {
       gate.markDirty();
     }
     if (gate.shouldRender()) {
@@ -241,6 +259,11 @@ export async function createViewer(
       up: [orbit.up.x, orbit.up.y, orbit.up.z],
       right: [orbit.right.x, orbit.right.y, orbit.right.z],
     }),
+    cameraOrientation: () => orbit.orientationValue,
+    cameraDestinationOrientation: () => orbit.destinationOrientationValue,
+    // 보간을 진행시키는 것은 렌더 루프의 `orbit.tick()` 이고 그것이 프레임마다 dirty 를
+    // 세운다 — 여기서 따로 markDirty 하지 않아도 유휴에서 깨어난다.
+    animateCameraTo: (orientation) => orbit.animateTo(orientation),
     projectToScreen: (point) => projectToScreen(scene, canvas, point),
     setInspector: (visible) => setInspectorVisible(scene, visible),
     dispose: () => {

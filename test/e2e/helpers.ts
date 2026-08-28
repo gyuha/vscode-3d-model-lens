@@ -196,6 +196,25 @@ export async function cameraAxes(
   );
 }
 
+/** 저장·복원되는 카메라 상태 — 자세(쿼터니언 `[x, y, z, w]`) · 거리 · 타깃. */
+export interface CameraSnapshot {
+  orientation: [number, number, number, number];
+  radius: number;
+  target: Vec3;
+}
+
+/**
+ * 카메라의 **자세·거리·타깃**. `cameraAxes` 가 못 보는 것(거리와 타깃)까지 읽어야 홈 버튼처럼
+ * 셋을 한꺼번에 되돌리는 조작을 판정할 수 있다. 같은 이유로 읽기만 한다 — 회전을 유발하는 API 는
+ * `__modelLens` 에 없다(`main.ts` 의 `exposeTestSeam`).
+ */
+export async function cameraState(page: Page): Promise<CameraSnapshot> {
+  return page.evaluate(
+    () =>
+      (window as unknown as { __modelLens: { camera: () => CameraSnapshot } }).__modelLens.camera(),
+  );
+}
+
 /** 두 단위벡터 사이 각(라디안). */
 export function angleBetween(a: Vec3, b: Vec3): number {
   const dot = a[0] * b[0] + a[1] * b[1] + a[2] * b[2];

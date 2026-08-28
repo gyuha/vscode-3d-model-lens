@@ -129,7 +129,14 @@ export class CameraInput {
     }
     event.preventDefault();
     if (down) {
-      this.orbit.stop();
+      // Alt(줌) · Ctrl(팬) 은 자세를 건드리지 않으므로 진행 중인 보간을 남긴다 — 수식어가
+      // 없는 방향키만 자세를 가져간다(실측: `▶` 클릭 80ms 뒤 Alt+방향키 줌이 90° 중 24.33°
+      // 에서 굳었다). `tickKeys()` 의 분기와 같은 조건이다.
+      if (this.modifiers.alt || this.modifiers.ctrl) {
+        this.orbit.stopInertia();
+      } else {
+        this.orbit.stop();
+      }
       this.held.add(key);
     } else {
       this.held.delete(key);
@@ -150,7 +157,15 @@ export class CameraInput {
 
   private onDown(event: PointerEvent): void {
     // 새 조작이 시작되면 이전 관성을 끊는다 — 섞이면 손가락을 따라가지 않는다.
-    this.orbit.stop();
+    // **오른쪽 버튼은 팬 전용이라 자세를 건드리지 않는다** — 진행 중인 자세 보간을 함께
+    // 버리면 큐브 클릭이 목적 자세에 도달하지 못한다(실측: `▶` 클릭 80ms 뒤 우드래그 팬 →
+    // 90° 중 29.34° 만 회전). 왼쪽·터치는 회전이 될 수 있으므로 `stop()` 이 맞다 — 자세를
+    // 가져가는 조작이면 그 자리에서 멈추는 것이 규약이다.
+    if (event.button === 2) {
+      this.orbit.stopInertia();
+    } else {
+      this.orbit.stop();
+    }
     this.canvas.setPointerCapture(event.pointerId);
     this.drags.set(event.pointerId, {
       pointerId: event.pointerId,
@@ -221,7 +236,11 @@ export class CameraInput {
 
   private onWheel(event: WheelEvent): void {
     event.preventDefault();
-    this.orbit.stop();
+    // **`stop()` 이 아니라 `stopInertia()` 다.** 줌은 자세를 건드리지 않으므로 진행 중인 자세
+    // 보간을 취소할 이유가 없다 — `stop()` 을 부르면 큐브 면 클릭이 목적 자세에 도달하지 못한
+    // 임의의 자세에서 굳는다(실측: `TOP` 클릭 80ms 뒤 휠 1노치 → 목표 `[0,-1,0]` 에서 40.63°
+    // 미달). 끊어야 하는 것은 관성 꼬리뿐이다.
+    this.orbit.stopInertia();
     this.orbit.zoom(1 + (event.deltaY / 100) * ZOOM_PER_NOTCH);
   }
 
