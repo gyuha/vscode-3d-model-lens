@@ -959,6 +959,63 @@ test.describe('패널 숨기기', () => {
   });
 });
 
+test.describe('회전 방향 규약 (절대 방향)', () => {
+  // **`방향키 회전 방향` 은 "키와 드래그가 서로 같은가"만 보므로 전역 부호 반전을 통과시킨다.**
+  // 실제로 v0.3.0 이 두 축 모두 반대로 나갔고 그 테스트는 초록이었다. 그래서 절대 방향을 여기서
+  // 못 박는다. 기준은 v0.2.1 의 실측값이다:
+  //   오른쪽 드래그 → 카메라가 화면 **왼쪽**으로 (`·right = -1.889`)
+  //   아래로 드래그 → 카메라가 화면 **위**로   (`·up    = +1.987`)
+  // 카메라 위치 = target - forward·radius 이므로, 위치 변화의 부호는 forward 변화의 **반대**다.
+  const CASES = [
+    {
+      label: '오른쪽으로 드래그하면 카메라가 화면 왼쪽으로 돈다',
+      drag: { dx: 1, dy: 0 },
+      axis: 'right' as const,
+      // 위치가 -right 로 가야 하므로 forward 변화는 +right 여야 한다.
+      expectPositive: true,
+    },
+    {
+      label: '아래로 드래그하면 카메라가 화면 위로 돈다',
+      drag: { dx: 0, dy: 1 },
+      axis: 'up' as const,
+      // 위치가 +up 으로 가야 하므로 forward 변화는 -up 이어야 한다.
+      expectPositive: false,
+    },
+  ];
+
+  for (const { label, drag, axis, expectPositive } of CASES) {
+    test(label, async ({ page }) => {
+      const problems = collectConsoleProblems(page);
+      await page.goto('/?fixture=cube.glb');
+      expect(await waitForViewer(page)).toBe('ready');
+
+      const box = (await page.locator('#canvas').boundingBox())!;
+      const cx = box.x + box.width / 2;
+      const cy = box.y + box.height / 2;
+      const span = Math.min(box.width, box.height) * 0.08;
+
+      const before = await cameraAxes(page);
+      await page.mouse.move(cx, cy);
+      await page.mouse.down();
+      for (let i = 1; i <= 5; i++) {
+        await page.mouse.move(cx + (drag.dx * span * i) / 5, cy + (drag.dy * span * i) / 5);
+      }
+      await page.mouse.up();
+      expect(await waitForIdle(page), '드래그 후 멈추지 않았다').toBe(true);
+      const after = await cameraAxes(page);
+
+      const projected = turnSign(before.forward, after.forward, before[axis]);
+      expect(Math.abs(projected), '드래그가 카메라를 움직이지 않았다').toBeGreaterThan(0.005);
+      expect(
+        projected > 0,
+        `방향이 v0.2.1 기준과 반대다 — 투영값 ${projected.toFixed(4)} (기대 부호: ${expectPositive ? '+' : '-'})`,
+      ).toBe(expectPositive);
+
+      expect(problems, `콘솔 경고: ${problems.join(' | ')}`).toEqual([]);
+    });
+  }
+});
+
 test.describe('방향키 회전 방향', () => {
   // 어느 쪽이 "옳은" 방향인지 박아 넣지 않는다 — **마우스와 같은 방향인지**만 단정한다.
   // 그래서 카메라 모델을 바꿔도 그대로 유효한 회귀 장치다.

@@ -5,6 +5,22 @@ All notable changes to the **3D Model Lens** extension are documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-08-28
+
+### Fixed
+
+- **Dragging rotated the model the wrong way on both axes.** The screen-relative rotation introduced
+  in 0.3.0 inverted the drag convention: dragging right swung the camera right instead of left, and
+  dragging down swung it down instead of up, so the model moved away from your hand rather than with
+  it. Restored to the pre-0.3.0 convention, arrow keys included. (0.3.0 was never published, so this
+  is the first release carrying the new rotation.)
+
+### Note
+
+- The direction is now pinned by a test that asserts the **absolute** convention, not just that the
+  keyboard and the mouse agree with each other — the older test checked only their agreement, which
+  is exactly why a both-axes inversion slipped through.
+
 ## [0.3.0] - 2026-08-27
 
 ### Changed

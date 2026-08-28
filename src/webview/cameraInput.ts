@@ -97,24 +97,25 @@ export class CameraInput {
     if (this.held.size === 0) {
       return false;
     }
+    // 드래그와 같은 부호여야 한다 — 오른쪽 키 ≡ 오른쪽 드래그(dx > 0), 아래 키 ≡ 아래 드래그(dy > 0).
     const horizontal =
-      (this.held.has('ArrowLeft') ? 1 : 0) - (this.held.has('ArrowRight') ? 1 : 0);
-    const vertical = (this.held.has('ArrowUp') ? 1 : 0) - (this.held.has('ArrowDown') ? 1 : 0);
+      (this.held.has('ArrowRight') ? 1 : 0) - (this.held.has('ArrowLeft') ? 1 : 0);
+    const vertical = (this.held.has('ArrowDown') ? 1 : 0) - (this.held.has('ArrowUp') ? 1 : 0);
 
     if (this.modifiers.alt) {
       // Alt = 줌. 위가 확대(거리 감소)다 — 기존 동작과 같다.
       if (vertical !== 0) {
-        this.orbit.zoom(1 - vertical * KEY_ZOOM_PER_FRAME);
+        // 위 키가 확대(거리 감소). vertical 은 이제 아래가 +1 이므로 부호가 그대로다.
+        this.orbit.zoom(1 + vertical * KEY_ZOOM_PER_FRAME);
       }
       return true;
     }
     if (this.modifiers.ctrl) {
       const step = this.orbit.radiusValue * KEY_PAN_PER_FRAME;
-      this.orbit.pan(-horizontal * step, -vertical * step);
+      // 드래그 팬과 같은 규약 — 오른쪽이면 타깃이 왼쪽으로 가서 모델이 오른쪽으로 따라온다.
+      this.orbit.pan(-horizontal * step, vertical * step);
       return true;
     }
-    // 회전 — **드래그와 같은 방향.** 오른쪽 키는 오른쪽 드래그(dx > 0)와 같아야 하고,
-    // 드래그는 `-dx` 를 넣으므로 오른쪽 키도 음수여야 한다. 이 규약은 e2e 2개가 지킨다.
     this.orbit.rotate(horizontal * KEY_ROTATE_PER_FRAME, vertical * KEY_ROTATE_PER_FRAME);
     return true;
   }
@@ -191,9 +192,13 @@ export class CameraInput {
       return;
     }
 
-    // 회전 — 드래그 방향과 같은 방향으로 돈다.
-    const horizontal = -dx * ROTATE_PER_PIXEL;
-    const vertical = -dy * ROTATE_PER_PIXEL;
+    // **부호 주의.** 기준은 v0.2.1 의 실측값이다 — 오른쪽으로 끌면 카메라가 화면 **왼쪽**으로
+    // 돌고(`·right = -1.889`), 아래로 끌면 카메라가 화면 **위**로 돈다(`·up = +1.987`).
+    // 즉 모델이 손가락을 따라오는 방향이다. 부호를 뒤집으면 조작 전체가 반대가 되는데,
+    // "키와 드래그가 서로 같은가"만 보는 테스트는 그걸 통과시킨다 —
+    // 절대 방향은 e2e `회전 방향 규약 (절대 방향)` 이 못 박는다.
+    const horizontal = dx * ROTATE_PER_PIXEL;
+    const vertical = dy * ROTATE_PER_PIXEL;
     drag.lastHorizontal = horizontal;
     drag.lastVertical = vertical;
     this.orbit.rotate(horizontal, vertical);
