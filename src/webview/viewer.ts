@@ -314,6 +314,8 @@ function createCamera(
   scene.activeCamera = orbit.camera;
   // 포인터·키보드를 직접 짠다 — `ArcRotateCamera*Input` 은 alpha/beta 누산기에 값을 넣으므로
   // 쿼터니언 자세에 쓸 수 없다. 자세한 근거는 ADR 260826-232902.
-  const input = new CameraInput(orbit, canvas);
+  // `0` 키는 큐브 홈 버튼과 같은 동작이어야 하므로 같은 표현(`orbit.frame(extents)`)을 넘긴다.
+  // 렌더 게이트는 캔버스의 keydown wake 리스너가 이미 깨우므로 별도 markDirty 가 필요 없다.
+  const input = new CameraInput(orbit, canvas, () => orbit.frame(extents));
   return { orbit, input };
 }

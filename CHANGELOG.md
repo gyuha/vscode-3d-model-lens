@@ -5,6 +5,19 @@ All notable changes to the **3D Model Lens** extension are documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-08-29
+
+### Added
+
+- **Number keys jump to a view** — `1` top, `2` front, `3` right, `4` back, `5` left, `6` bottom, and
+  `0` for the opening view. They are the navigation cube's own destinations, reached without aiming at
+  it: the six faces animate exactly as clicking them does, and `0` matches the cube's home button by
+  resetting zoom and pan as well as rotation. Each cube face now names its key in its tooltip, which is
+  where you find them — the extension deliberately contributes no keybindings, so a modified press
+  (`Ctrl`, `Alt`, `Shift`, `Cmd`) is passed through untouched and your own shortcuts keep working.
+  Like the arrow keys, they apply while the 3D area has focus, so click the model once after switching
+  tabs.
+
 ## [0.4.0] - 2026-08-29
 
 ### Added

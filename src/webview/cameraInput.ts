@@ -1,3 +1,5 @@
+import { Vector3 } from '@babylonjs/core/Maths/math.vector.js';
+import { poseForNormal } from './navCubePose.js';
 import type { OrbitCamera } from './orbitCamera.js';
 
 /**
@@ -38,6 +40,24 @@ const KEY_ZOOM_PER_FRAME = 0.02;
 /** Ctrl + 방향키의 프레임당 팬 거리 = `radius × 이 값`. */
 const KEY_PAN_PER_FRAME = 0.01;
 
+/**
+ * 숫자 키 → 시점. **내비게이션 큐브의 목적지와 같은 것**을 가리킨다 — 6면은 큐브 면의 법선
+ * (`navCubeGeometry.ts`: `TOP=+Y` · `FRONT=+Z` · `RIGHT=+X`)이고, `0` 은 홈 버튼과 같은
+ * 완전 초기화(회전·줌·팬)다. 자세 계산은 `poseForNormal` 이 맡으므로 여기서 새로 하지 않는다.
+ *
+ * `TOP`/`BOTTOM` 의 화면 up 이 `∓Z` 로 못 박힌 것은 `poseForNormal` 의 축퇴 규약이며
+ * **의도된 설계다**(ADR `260828-204140`).
+ */
+const VIEW_KEYS: Record<string, readonly [number, number, number] | 'home'> = {
+  '0': 'home',
+  '1': [0, 1, 0],
+  '2': [0, 0, 1],
+  '3': [1, 0, 0],
+  '4': [0, 0, -1],
+  '5': [-1, 0, 0],
+  '6': [0, -1, 0],
+};
+
 const ARROWS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'] as const;
 type Arrow = (typeof ARROWS)[number];
 
@@ -75,6 +95,8 @@ export class CameraInput {
   public constructor(
     private readonly orbit: OrbitCamera,
     private readonly canvas: HTMLCanvasElement,
+    /** `0` 키의 목적지. 큐브 홈 버튼과 **같은 동작**이어야 한다 — 회전·줌·팬을 첫 값으로. */
+    private readonly resetView: () => void,
   ) {
     this.on('pointerdown', (event) => this.onDown(event as PointerEvent));
     this.on('pointermove', (event) => this.onMove(event as PointerEvent));
@@ -123,6 +145,27 @@ export class CameraInput {
   private onKey(event: KeyboardEvent, down: boolean): void {
     this.modifiers.alt = event.altKey;
     this.modifiers.ctrl = event.ctrlKey || event.metaKey;
+
+    const view = VIEW_KEYS[event.key];
+    if (view) {
+      // **수식어가 붙은 숫자는 건드리지 않는다** — `Ctrl+1` 같은 VS Code 단축키를 가로채면 안 된다.
+      if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+        return;
+      }
+      event.preventDefault();
+      // 방향키와 달리 **누르고 있어도 한 번만** 동작한다 — 목적지가 하나뿐이라 프레임마다
+      // 되풀이할 것이 없다. 그래서 `held` 에 넣지 않고 keydown 에서 곧바로 끝낸다.
+      if (down && !event.repeat) {
+        if (view === 'home') {
+          this.resetView();
+        } else {
+          // 큐브 면 클릭과 **같은 경로** — `animateTo` 가 내부에서 관성·이전 보간을 정리한다.
+          this.orbit.animateTo(poseForNormal(new Vector3(...view)));
+        }
+      }
+      return;
+    }
+
     const key = ARROWS.find((arrow) => arrow === event.key);
     if (!key) {
       return;

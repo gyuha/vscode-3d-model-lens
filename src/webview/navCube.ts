@@ -127,6 +127,20 @@ const ARROWS: readonly ArrowSpec[] = [
   { id: 'nav-cube-arrow-right', arrow: 'right', direction: [1, 0] },
 ];
 
+/**
+ * 면 라벨 → 숫자 단축키. `cameraInput.ts` 의 `VIEW_KEYS` 와 **같은 대응**이어야 한다 —
+ * 어긋나면 툴팁이 거짓말을 한다. e2e `숫자 시점 단축키` 가 실제 동작을 단정하므로 그쪽이
+ * 진실이고, 여기는 그것을 사람에게 알리는 표시일 뿐이다.
+ */
+const FACE_KEYS: Record<string, string> = {
+  TOP: '1',
+  FRONT: '2',
+  RIGHT: '3',
+  BACK: '4',
+  LEFT: '5',
+  BOTTOM: '6',
+};
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
 /** 큐브가 카메라와 이야기하는 유일한 창구. 씬도 캔버스도 모르게 둔다. */
@@ -250,7 +264,7 @@ const buildHome = (host: NavCubeHost): SVGGElement => {
   path.setAttribute('d', silhouette);
   // 아이콘뿐인 조작기라 이름을 붙여 준다. SVG 는 `title` **속성**이 아니라 자식 요소다.
   const title = document.createElementNS(SVG_NS, 'title');
-  title.textContent = 'Reset view';
+  title.textContent = 'Reset view (0)';
   path.append(title);
   // 화살표와 같은 포커스 함정이 있다 — 이 클릭도 캔버스의 포커스를 앗아가면 방향키가 죽는다.
   // 되돌리는 것은 `main.ts` 의 콜백이다(큐브는 캔버스를 모르는 채로 둔다).
@@ -358,6 +372,14 @@ export function createNavCube(container: HTMLElement, host: NavCubeHost): NavCub
       // 법선을 그대로 넘긴다 — `poseForNormal` 이 정규화까지 맡으므로 꼭짓점도 손댈 필요가 없다.
       const normal = new Vector3(...region.normal);
       path.addEventListener('click', () => host.animateTo(poseForNormal(normal)));
+      // 숫자 단축키의 **유일한 발견 경로**다 — 이 확장은 키바인딩을 기여하지 않으므로
+      // VS Code 의 키보드 단축키 목록에 나타나지 않는다.
+      const shortcut = region.label ? FACE_KEYS[region.label] : undefined;
+      if (shortcut) {
+        const faceTitle = document.createElementNS(SVG_NS, 'title');
+        faceTitle.textContent = `${region.label} (${shortcut})`;
+        path.append(faceTitle);
+      }
     }
     paths.set(region.id, path);
     faces.append(path);

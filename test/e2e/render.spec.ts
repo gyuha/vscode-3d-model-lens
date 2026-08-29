@@ -2234,3 +2234,158 @@ test.describe('축 삼각대 (RGB)', () => {
     ).toBeGreaterThan(0.005);
   });
 });
+
+test.describe('숫자 시점 단축키', () => {
+  // **절대 기준으로 단정한다.** "키끼리 서로 다른가" 같은 상대 비교는 번호↔면 매핑이 통째로
+  // 어긋나도 통과한다 — 이 세션에서 드래그 부호 반전이 정확히 그렇게 빠져나갔다
+  // (ADR `260826-232902` 의 "드래그 방향 규약"). 그래서 각 키가 **그 면의 법선**을 만드는지 본다.
+  //
+  // 카메라는 target 에서 `-forward · radius` 만큼 떨어져 있으므로, 면 법선 `n` 을 보는 자세란
+  // `forward = -n` 이다. `TOP`/`BOTTOM` 의 화면 up 이 `∓Z` 인 것은 `poseForNormal` 의 축퇴
+  // 규약이며 의도된 설계다(ADR `260828-204140`).
+  const FACES = [
+    { key: '1', label: 'TOP', normal: [0, 1, 0], up: [0, 0, -1] },
+    { key: '2', label: 'FRONT', normal: [0, 0, 1], up: [0, 1, 0] },
+    { key: '3', label: 'RIGHT', normal: [1, 0, 0], up: [0, 1, 0] },
+    { key: '4', label: 'BACK', normal: [0, 0, -1], up: [0, 1, 0] },
+    { key: '5', label: 'LEFT', normal: [-1, 0, 0], up: [0, 1, 0] },
+    { key: '6', label: 'BOTTOM', normal: [0, -1, 0], up: [0, 0, 1] },
+  ] as const;
+
+  const fmt = (v: readonly number[]): string => v.map((n) => n.toFixed(3)).join(',');
+
+  async function pressAndSettle(page: Page, key: string): Promise<void> {
+    await page.locator('#canvas').focus();
+    await page.keyboard.press(key);
+    expect(await waitForIdle(page), '보간이 끝나지 않았다').toBe(true);
+  }
+
+  for (const { key, label, normal, up } of FACES) {
+    test(`${key} 를 누르면 ${label} 시점이 된다`, async ({ page }) => {
+      const problems = collectConsoleProblems(page);
+      await page.goto('/?fixture=cube.stl');
+      expect(await waitForViewer(page)).toBe('ready');
+
+      // 먼저 임의 자세로 흐트러뜨린다 — 시작 자세와 우연히 같아서 통과하는 것을 막는다.
+      const box = (await page.locator('#canvas').boundingBox())!;
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      for (let i = 1; i <= 6; i++) {
+        await page.mouse.move(box.x + box.width / 2 + i * 9, box.y + box.height / 2 + i * 5);
+      }
+      await page.mouse.up();
+      await waitForIdle(page);
+
+      await pressAndSettle(page, key);
+      const axes = await cameraAxes(page);
+
+      // 시선은 법선의 반대 — 카메라가 그 면 쪽에서 모델을 본다.
+      const expectedForward = normal.map((n) => -n);
+      expect(
+        angleBetween(axes.forward, expectedForward as [number, number, number]),
+        `${key} 가 ${label} 을 보지 않는다 — forward=(${fmt(axes.forward)}) 기대=(${fmt(expectedForward)})`,
+      ).toBeLessThan(0.02);
+      expect(
+        angleBetween(axes.up, up as unknown as [number, number, number]),
+        `${key} 의 화면 up 이 규약과 다르다 — up=(${fmt(axes.up)}) 기대=(${fmt(up)})`,
+      ).toBeLessThan(0.02);
+
+      expect(problems, `콘솔 경고: ${problems.join(' | ')}`).toEqual([]);
+    });
+  }
+
+  test('0 을 누르면 회전뿐 아니라 줌·팬까지 첫 값으로 돌아온다', async ({ page }) => {
+    const problems = collectConsoleProblems(page);
+    await page.goto('/?fixture=cube.stl');
+    expect(await waitForViewer(page)).toBe('ready');
+    const first = await cameraState(page);
+
+    // 회전 + 줌 + 팬을 모두 흐트러뜨린다.
+    const box = (await page.locator('#canvas').boundingBox())!;
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    await page.mouse.move(cx, cy);
+    await page.mouse.down();
+    for (let i = 1; i <= 6; i++) await page.mouse.move(cx + i * 9, cy + i * 5);
+    await page.mouse.up();
+    await page.mouse.wheel(0, 240);
+    await page.mouse.move(cx, cy);
+    await page.mouse.down({ button: 'right' });
+    for (let i = 1; i <= 6; i++) await page.mouse.move(cx + i * 8, cy);
+    await page.mouse.up({ button: 'right' });
+    expect(await waitForIdle(page)).toBe(true);
+
+    const moved = await cameraState(page);
+    expect(Math.abs(moved.radius - first.radius), '줌이 안 바뀌어 테스트 전제가 깨졌다').toBeGreaterThan(
+      0.01,
+    );
+
+    await pressAndSettle(page, '0');
+    const back = await cameraState(page);
+    expect(back.radius, '줌이 첫 값으로 안 돌아왔다').toBeCloseTo(first.radius, 3);
+    for (const axis of [0, 1, 2]) {
+      expect(back.target[axis], `팬이 첫 값으로 안 돌아왔다 (축 ${axis})`).toBeCloseTo(
+        first.target[axis],
+        3,
+      );
+    }
+
+    expect(problems, `콘솔 경고: ${problems.join(' | ')}`).toEqual([]);
+  });
+
+  // **조합마다 별도 테스트다.** 하나의 루프에서 4개를 연달아 보내면 합성 입력이 너무 빨라
+  // `Shift` 의 keyup 이 `3` 의 keydown 보다 먼저 처리되고, 그러면 **수식어 없는 `3`** 이 도달해
+  // 카메라가 실제로 움직인다(실측: `forward` 가 `-1,0,0` = RIGHT). 그건 사용자가 Shift 를 먼저
+  // 떼고 3 을 누른 것과 같으므로 제품은 올바르다 — 테스트가 그 경합을 만들지 않으면 된다.
+  for (const combo of ['Control+1', 'Alt+2', 'Shift+3', 'Meta+4'] as const) {
+    test(`${combo} 은 카메라를 움직이지 않는다 — VS Code 단축키를 가로채지 않는다`, async ({
+      page,
+    }) => {
+      await page.goto('/?fixture=cube.stl');
+      expect(await waitForViewer(page)).toBe('ready');
+      await page.locator('#canvas').focus();
+
+      const before = await cameraAxes(page);
+      await page.keyboard.press(combo);
+      expect(await waitForIdle(page)).toBe(true);
+      const after = await cameraAxes(page);
+
+      expect(
+        angleBetween(before.forward, after.forward),
+        `${combo} 가 카메라를 움직였다 — ${fmt(before.forward)} → ${fmt(after.forward)}`,
+      ).toBeLessThan(0.001);
+    });
+  }
+});
+
+test.describe('큐브 툴팁이 숫자 단축키를 알린다', () => {
+  // 이 확장은 키바인딩을 기여하지 않으므로 숫자 단축키가 VS Code 의 키보드 단축키 목록에
+  // 나타나지 않는다. **툴팁이 유일한 발견 경로**라, 없어지거나 번호가 어긋나면 기능이 있어도
+  // 아무도 모른다. 실제 동작은 `숫자 시점 단축키` 가 단정하므로 그쪽이 진실이고 여기는 표시를 본다.
+  const FACE_KEYS = [
+    ['TOP', '1'],
+    ['FRONT', '2'],
+    ['RIGHT', '3'],
+    ['BACK', '4'],
+    ['LEFT', '5'],
+    ['BOTTOM', '6'],
+  ] as const;
+
+  test('여섯 면과 홈 버튼이 각자의 숫자를 툴팁에 담는다', async ({ page }) => {
+    await page.goto('/?fixture=cube.stl');
+    expect(await waitForViewer(page)).toBe('ready');
+
+    const titles = await page.evaluate(() =>
+      [...document.querySelectorAll('#nav-cube path')]
+        .map((p) => p.querySelector('title')?.textContent ?? '')
+        .filter((t) => t.length > 0),
+    );
+
+    for (const [label, key] of FACE_KEYS) {
+      expect(titles, `${label} 면의 툴팁에 숫자 ${key} 가 없다 — 발견 경로가 끊긴다`).toContain(
+        `${label} (${key})`,
+      );
+    }
+    expect(titles, '홈 버튼 툴팁에 0 이 없다').toContain('Reset view (0)');
+  });
+});

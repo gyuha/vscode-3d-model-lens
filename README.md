@@ -61,6 +61,20 @@ one click. Its six labelled faces and eight corners are click targets; the four 
 view 90° at a time, and the small button at its lower right returns to the opening view. Every destination arrives level,
 so clicking a face is also how you straighten a tilted view.
 
+**Number keys jump to the same destinations**, so you can reach a view without aiming at the cube:
+
+| Key | View | Key | View |
+|---|---|---|---|
+| `0` | Opening view (also resets zoom and pan) | `4` | Back |
+| `1` | Top | `5` | Left |
+| `2` | Front | `6` | Bottom |
+| `3` | Right | | |
+
+Each face of the cube names its key in its tooltip. Keyboard input — number keys and arrow keys alike —
+goes to the viewer only while the 3D area has focus, so **click the model once after switching tabs**;
+this keeps the viewer from swallowing keystrokes meant for the editor beside it. Number keys with a
+modifier (`Ctrl`, `Alt`, `Shift`, `Cmd`) are left alone so your own shortcuts keep working.
+
 At the cube's lower left, a small **X/Y/Z triad** points along the world axes — the same axes the dimensions above are
 labelled with. The letters are drawn on the lines, so the axes stay readable without relying on their colours.
 
