@@ -9,16 +9,13 @@ import { Matrix, Vector3 } from '@babylonjs/core/Maths/math.vector.js';
 import { Viewport } from '@babylonjs/core/Maths/math.viewport.js';
 import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial.js';
 import { CreateLines } from '@babylonjs/core/Meshes/Builders/linesBuilder.js';
-import { CreateSphere } from '@babylonjs/core/Meshes/Builders/sphereBuilder.js';
 import { PointerEventTypes } from '@babylonjs/core/Events/pointerEvents.js';
 import type { Camera } from '@babylonjs/core/Cameras/camera.js';
 import type { LinesMesh } from '@babylonjs/core/Meshes/linesMesh.js';
-import type { Mesh } from '@babylonjs/core/Meshes/mesh.js';
 import type { PickingInfo } from '@babylonjs/core/Collisions/pickingInfo.js';
 import type { Scene } from '@babylonjs/core/scene.js';
 import { distance, midpoint, snapToNearestVertex, type Point3, type Triangle } from '../measure.js';
 import { formatLength, type ResolvedUnit } from '../units.js';
-import { extentDiagonal, type Extents } from './geometry.js';
 
 /** 이 픽셀 수 이상 움직였으면 탭이 아니라 궤도 회전으로 본다. 손떨림·트랙패드를 감안한 값. */
 const TAP_THRESHOLD_PX = 6;
@@ -45,8 +42,12 @@ export interface Measurement {
  *   임계값을 넘는 이동은 탭으로 보지 않기 때문이다.
  * - **선·마커는 `renderingGroupId = 1`.** Babylon 이 렌더링 그룹 사이에 깊이 버퍼를 지우므로
  *   모델을 관통해서도 측정이 보인다.
- * - **마커 크기는 바운딩 박스 대각선에 비례.** 고정 크기는 작은 모델에서 안 보이고 큰 모델을
- *   삼킨다.
+ * - **마커도 라벨과 같은 HTML DOM 오버레이다.** 예전에는 바운딩 박스에 비례한 3D 구였는데,
+ *   그러면 원근 때문에 **확대하면 커지고 멀어지면 작아진다**. 화면 고정 크기가 옳고, 그것이
+ *   "작은 모델에서 안 보이고 큰 모델을 삼킨다"는 원래 우려도 함께 없앤다(그 우려는 고정 *월드*
+ *   크기에 대한 것이었다). 깊이 가림은 어차피 쓰지 않으므로(아래 `renderingGroupId`) 마커를
+ *   3D 로 둘 이유가 없었다. 선만 `LinesMesh` 로 남는다 — 두 점 사이를 잇는 것은 투영이 아니라
+ *   기하이기 때문이다.
  * - **거리 라벨은 3D 가 아니라 HTML DOM 오버레이.** `@babylonjs/gui` 를 끌어들이지 않고
  *   (Inspector 를 lazy chunk 로 뺀 효과를 지킨다), VS Code 테마 변수를 그대로 쓴다.
  */
@@ -54,17 +55,16 @@ export class MeasurementTool {
   private readonly measurements: Measurement[] = [];
   private readonly visuals = new Map<
     number,
-    { line: LinesMesh; markers: Mesh[]; label: HTMLElement }
+    { line: LinesMesh; markers: HTMLElement[]; label: HTMLElement }
   >();
   private pending: Point3 | undefined;
   private pointerDownAt: { x: number; y: number } | undefined;
-  private pendingMarker: Mesh | undefined;
+  private pendingMarker: HTMLElement | undefined;
   private nextId = 1;
   private active = false;
   private snap = true;
   private selectedId: number | undefined;
 
-  private readonly markerDiameter: number;
   private readonly material: StandardMaterial;
   private readonly selectedMaterial: StandardMaterial;
 
@@ -74,12 +74,9 @@ export class MeasurementTool {
     private readonly scene: Scene,
     private readonly canvas: HTMLCanvasElement,
     private readonly labelHost: HTMLElement,
-    extents: Extents,
     private unit: ResolvedUnit,
     private decimals: number,
   ) {
-    this.markerDiameter = Math.max(extentDiagonal(extents) * 0.012, Number.MIN_VALUE);
-
     this.material = new StandardMaterial('modelLens.measure', scene);
     this.material.emissiveColor = new Color3(1, 0.55, 0.1);
     this.material.disableLighting = true;
@@ -108,7 +105,7 @@ export class MeasurementTool {
       }
       this.handleTap(info.pickInfo);
     }, PointerEventTypes.POINTERDOWN | PointerEventTypes.POINTERUP);
-    scene.onAfterRenderObservable.add(() => this.positionLabels());
+    scene.onAfterRenderObservable.add(() => this.positionOverlay());
   }
 
   public get list(): readonly Measurement[] {
@@ -179,12 +176,12 @@ export class MeasurementTool {
   public select(id: number | undefined): void {
     this.selectedId = id;
     for (const [measurementId, visual] of this.visuals) {
-      const material = measurementId === id ? this.selectedMaterial : this.material;
-      visual.line.color = material.emissiveColor;
+      const selected = measurementId === id;
+      visual.line.color = (selected ? this.selectedMaterial : this.material).emissiveColor;
       for (const marker of visual.markers) {
-        marker.material = material;
+        marker.classList.toggle('selected', selected);
       }
-      visual.label.classList.toggle('selected', measurementId === id);
+      visual.label.classList.toggle('selected', selected);
     }
     this.onChange();
   }
@@ -234,7 +231,7 @@ export class MeasurementTool {
     }
     if (!this.pending) {
       this.pending = point;
-      this.pendingMarker = this.createMarker(point);
+      this.pendingMarker = this.createMarker();
       return;
     }
     const measurement: Measurement = {
@@ -272,7 +269,7 @@ export class MeasurementTool {
     line.isPickable = false;
     line.renderingGroupId = 1;
 
-    const markers = [measurement.a, measurement.b].map((point) => this.createMarker(point));
+    const markers = [measurement.a, measurement.b].map(() => this.createMarker());
 
     const label = document.createElement('span');
     label.className = 'measure-label';
@@ -282,22 +279,20 @@ export class MeasurementTool {
     this.visuals.set(measurement.id, { line, markers, label });
   }
 
-  private createMarker(point: Point3): Mesh {
-    const marker = CreateSphere(
-      'modelLens.measure.marker',
-      { diameter: this.markerDiameter, segments: 8 },
-      this.scene,
-    );
-    marker.position = toVector(point);
-    marker.material = this.material;
-    marker.isPickable = false;
-    marker.renderingGroupId = 1;
+  /**
+   * 측정 점 마커. **크기는 CSS 가 픽셀로 정하므로 줌·거리와 무관하게 일정하다** — 이것이
+   * 3D 구를 버린 이유다. 위치는 `positionOverlay()` 가 매 프레임 투영해서 넣는다.
+   */
+  private createMarker(): HTMLElement {
+    const marker = document.createElement('span');
+    marker.className = 'measure-marker';
+    this.labelHost.appendChild(marker);
     return marker;
   }
 
   private discardPending(): void {
     this.pending = undefined;
-    this.pendingMarker?.dispose();
+    this.pendingMarker?.remove();
     this.pendingMarker = undefined;
   }
 
@@ -308,21 +303,21 @@ export class MeasurementTool {
     }
     visual.line.dispose();
     for (const marker of visual.markers) {
-      marker.dispose();
+      marker.remove();
     }
     visual.label.remove();
     this.visuals.delete(id);
   }
 
   /**
-   * 라벨을 선의 중점 위로 옮긴다.
+   * 라벨과 마커를 화면 좌표로 옮긴다 — 라벨은 선의 중점, 마커는 두 끝점.
    *
    * 뷰포트를 **CSS 픽셀**로 잡는다 — `engine.getRenderWidth()` 는 devicePixelRatio 가 적용된
    * 버퍼 크기여서 고해상도 화면에서 라벨이 어긋난다.
    */
-  private positionLabels(): void {
+  private positionOverlay(): void {
     const camera: Camera | null = this.scene.activeCamera;
-    if (!camera || this.visuals.size === 0) {
+    if (!camera) {
       return;
     }
     const rect = this.canvas.getBoundingClientRect();
@@ -332,23 +327,30 @@ export class MeasurementTool {
     const viewport = new Viewport(0, 0, rect.width, rect.height);
     const transform = this.scene.getTransformMatrix();
 
+    /** 월드 점을 화면으로 옮긴다. 카메라 뒤쪽이면 숨긴다 — `z` 가 `[0,1]` 밖이 그 조건이다. */
+    const place = (element: HTMLElement, point: Point3): void => {
+      const projected = Vector3.Project(toVector(point), Matrix.Identity(), transform, viewport);
+      const behind = projected.z < 0 || projected.z > 1;
+      element.style.display = behind ? 'none' : '';
+      if (!behind) {
+        element.style.transform = `translate(-50%, -50%) translate(${projected.x}px, ${projected.y}px)`;
+      }
+    };
+
     for (const measurement of this.measurements) {
       const visual = this.visuals.get(measurement.id);
       if (!visual) {
         continue;
       }
-      const projected = Vector3.Project(
-        toVector(midpoint(measurement.a, measurement.b)),
-        Matrix.Identity(),
-        transform,
-        viewport,
-      );
-      // z 가 [0,1] 밖이면 카메라 뒤쪽이다 — 라벨을 숨긴다.
-      const behind = projected.z < 0 || projected.z > 1;
-      visual.label.style.display = behind ? 'none' : '';
-      if (!behind) {
-        visual.label.style.transform = `translate(-50%, -50%) translate(${projected.x}px, ${projected.y}px)`;
-      }
+      place(visual.label, midpoint(measurement.a, measurement.b));
+      // 마커 둘은 측정의 두 끝점이다 — `createVisual` 이 `[a, b]` 순서로 만든다.
+      const ends = [measurement.a, measurement.b];
+      visual.markers.forEach((marker, index) => place(marker, ends[index]));
+    }
+
+    // 두 번째 점을 찍기 전의 대기 마커.
+    if (this.pendingMarker && this.pending) {
+      place(this.pendingMarker, this.pending);
     }
   }
 }

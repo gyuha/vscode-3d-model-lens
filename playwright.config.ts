@@ -1,6 +1,10 @@
 import { defineConfig } from '@playwright/test';
 
-const PORT = 39177;
+// 포트를 고정하면 **다른 프로젝트의 개발 서버가 이 포트를 잡고 있을 때
+// `reuseExistingServer` 가 그 서버에 붙어 엉뚱한 앱을 테스트한다** — 자매 프로젝트
+// `3d-model-lens` 는 DOM 이 거의 같아 대부분 초록으로 통과해 버려서 알아채기도 어렵다.
+// 실제로 한 번 당했다. 충돌하면 `UAT_PORT` 로 비켜 간다.
+const PORT = Number(process.env.UAT_PORT ?? 39177);
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 
 export default defineConfig({

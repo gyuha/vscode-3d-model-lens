@@ -338,6 +338,15 @@ export function buildWebviewHtml(params: WebviewHtmlParams): string {
   }
 
   #labels { position: absolute; inset: 0; pointer-events: none; }
+  /* 측정 점 마커. **크기를 픽셀로 고정한다** — 3D 구였을 때는 원근 때문에 확대하면 커지고
+     멀어지면 작아졌다. 색은 measurement.ts 의 재질과 같은 값이다(주황 = 측정, 하늘색 = 선택). */
+  .measure-marker {
+    position: absolute; top: 0; left: 0;
+    width: 0.625rem; height: 0.625rem; border-radius: 50%;
+    background: rgb(255, 140, 26);
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.45);
+  }
+  .measure-marker.selected { background: rgb(64, 204, 255); }
   .measure-label {
     position: absolute; top: 0; left: 0; white-space: nowrap;
     padding: 0.0625rem 0.375rem;

@@ -145,8 +145,15 @@ describe('buildWebviewHtml — 패널 섹션', () => {
     }
   });
 
-  it('모서리 반경을 선언하지 않는다 — 각진 실루엣이 브랜드다', () => {
-    expect(html).not.toContain('border-radius');
+  it('모서리 반경은 0 아니면 완전한 원뿐이다 — 그 사이는 없다', () => {
+    // `DESIGN.md:376` 이 못 박은 이진 규칙이다: *"almost always 0, sometimes circular.
+    // Nothing in between."* — 각진 실루엣이 브랜드이고, 원은 **조작 요소**(아이콘 버튼·토글 필,
+    // `DESIGN.md:259`)에만 허용된다. 측정 마커는 조작 요소가 아니지만, 3D 구를 DOM 으로 옮기면서
+    // 이전과 같은 원형을 유지하기로 결정해 `50%` 를 예외로 둔다.
+    // **`4px` 같은 중간값은 여전히 금지다** — 그것이 이 규칙이 실제로 막으려는 것이다.
+    const radii = [...html.matchAll(/border-radius:\s*([^;}]+)/g)].map((m) => m[1].trim());
+    const inBetween = radii.filter((r) => r !== '50%');
+    expect(inBetween, `0 도 원도 아닌 반경: ${inBetween.join(', ')}`).toEqual([]);
   });
 
   it('M 트라이컬러는 정확히 두 곳에만 쓴다 — 패널 머리와 로딩', () => {

@@ -20,8 +20,6 @@ import {
   waitForViewer,
 } from './helpers';
 
-const ORIGIN = 'http://127.0.0.1:39177';
-
 /** FIXTURES.md 의 기대 치수. 이 값이 이 스위트의 단일 기준이다. */
 const FIXTURES = [
   { file: 'cube.gltf', extents: [2, 3, 4] as const, note: '외부 cube.bin 참조 — 형제 파일 해결' },
@@ -47,8 +45,10 @@ test.describe('WebGL2 엔진', () => {
 });
 
 test.describe('외부 네트워크 의존 0건', () => {
-  test('모델 로드 중 외부 오리진 요청이 없다', async ({ page }) => {
-    const external = collectExternalRequests(page, ORIGIN);
+  // 오리진은 `baseURL` 에서 받는다 — 하드코딩하면 `UAT_PORT` 로 포트를 비켜 갈 때
+  // 우리 서버가 통째로 "외부"로 잡혀 이 테스트가 거짓으로 빨개진다.
+  test('모델 로드 중 외부 오리진 요청이 없다', async ({ page, baseURL }) => {
+    const external = collectExternalRequests(page, baseURL ?? '');
     await page.goto('/?fixture=cube.gltf');
     expect(await waitForViewer(page)).toBe('ready');
     expect(external, `외부 요청: ${external.join(', ')}`).toEqual([]);
@@ -56,8 +56,9 @@ test.describe('외부 네트워크 의존 0건', () => {
 
   test('Inspector 를 켜도 외부 오리진 요청이 없다 — CSP 가 차단하고 로컬 chunk 만 쓴다', async ({
     page,
+    baseURL,
   }) => {
-    const external = collectExternalRequests(page, ORIGIN);
+    const external = collectExternalRequests(page, baseURL ?? '');
     await page.goto('/?fixture=cube.glb');
     expect(await waitForViewer(page)).toBe('ready');
 
@@ -2387,5 +2388,57 @@ test.describe('큐브 툴팁이 숫자 단축키를 알린다', () => {
       );
     }
     expect(titles, '홈 버튼 툴팁에 0 이 없다').toContain('Reset view (0)');
+  });
+});
+
+test.describe('측정 마커는 화면 고정 크기다', () => {
+  // **이 테스트가 이 변경의 전부다.** 예전 마커는 월드 공간의 3D 구여서 원근에 따라 확대하면
+  // 커지고 멀어지면 작아졌다. DOM 오버레이로 옮겨 CSS 가 픽셀로 크기를 정하므로 줌과 무관하게
+  // 일정해야 한다 — 그것을 절대 기준(픽셀 크기)으로 단정한다.
+  test('줌을 크게 바꿔도 마커의 픽셀 크기가 변하지 않는다', async ({ page }) => {
+    const problems = collectConsoleProblems(page);
+    await page.goto('/?fixture=cube.stl&unit=mm');
+    expect(await waitForViewer(page)).toBe('ready');
+    await sendHostMessage(page, { type: 'setMeasureMode', active: true });
+    await expect(page.locator('#root')).toHaveAttribute('data-measure', 'on');
+
+    const targets = await vertexTargets(page);
+    const pair = axisPair(targets, 'x', 10);
+    expect(pair, 'x 축으로 10 떨어진 정점 쌍을 찾지 못했다').toBeTruthy();
+    const box = await page.locator('#canvas').boundingBox();
+    if (!pair || !box) {
+      return;
+    }
+    for (const target of pair) {
+      await page.mouse.click(box.x + target.screen.x, box.y + target.screen.y);
+      await page.waitForTimeout(80);
+    }
+
+    const markers = page.locator('.measure-marker');
+    await expect(markers, '측정 하나에 마커는 둘이다').toHaveCount(2);
+    const sizeOf = async (): Promise<number> => {
+      const rect = await markers.first().boundingBox();
+      expect(rect, '마커를 찾지 못했다').not.toBeNull();
+      return rect ? rect.width : 0;
+    };
+
+    const near = await sizeOf();
+    expect(near, '마커가 그려지지 않았다').toBeGreaterThan(1);
+
+    // 크게 줌 아웃 — 3D 구였다면 여기서 눈에 띄게 작아졌다.
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    await page.mouse.move(cx, cy);
+    await page.mouse.wheel(0, 1200);
+    expect(await waitForIdle(page)).toBe(true);
+    const far = await sizeOf();
+
+    // 줌이 실제로 바뀌었는지 — 안 바뀌었으면 이 테스트는 아무것도 증명하지 못한다.
+    const radius = (await cameraState(page)).radius;
+    expect(radius, '줌이 바뀌지 않아 테스트 전제가 깨졌다').toBeGreaterThan(0);
+
+    expect(far, `줌을 바꾸자 마커 크기가 변했다 — ${near}px → ${far}px`).toBeCloseTo(near, 1);
+
+    expect(problems, `콘솔 경고: ${problems.join(' | ')}`).toEqual([]);
   });
 });
