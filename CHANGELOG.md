@@ -5,6 +5,15 @@ All notable changes to the **3D Model Lens** extension are documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-08-30
+
+### Fixed
+
+- **Measurement points keep a fixed size on screen.** They were spheres living in the 3D scene, so
+  they swelled as you zoomed in and all but vanished on a distant pick — the one part of a measuring
+  tool that should never change size did. They are now drawn as screen-space overlays and stay the
+  same size whatever the camera is doing, while still tracking the exact 3D point they mark.
+
 ## [0.5.0] - 2026-08-29
 
 ### Added
