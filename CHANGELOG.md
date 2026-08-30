@@ -5,6 +5,22 @@ All notable changes to the **3D Model Lens** extension are documented in this fi
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-08-30
+
+### Added
+
+- **Three shape aids under Display, for when a model reads as one flat tone.** Flat-shaded parts — STL
+  especially — often arrive as a single near-uniform colour, because the default lighting comes from every
+  direction at once and an evenly lit diffuse surface barely changes with the angle it faces. **Axis
+  lighting** lights the model from three axes in contrasting colours so faces pointing different ways come
+  out in different hues; **Edges** draws a line along every crease; **Normal colors** paints each face by
+  the direction it points and ignores lighting altogether. **Axis lighting applies to STL only** — it works
+  by adding diffuse light, and glTF/GLB materials are metallic by default, where diffuse light changes
+  nothing and the model only gets darker; the checkbox is locked on those files. All three are off by default, are saved as
+  settings so they follow you to the next file, and change only how the model is drawn — never the
+  geometry, the dimensions, or your measurements. Turning them off restores exactly what you had.
+  **Edges** is unavailable on very dense models, where finding the creases would freeze the viewer.
+
 ## [0.5.1] - 2026-08-30
 
 ### Fixed
