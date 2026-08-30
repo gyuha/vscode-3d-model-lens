@@ -41,8 +41,9 @@ mode — movement past a threshold does not place a measurement point.
   This is what you need to measure corner and edge dimensions accurately. To see where the vertices are,
   open the Babylon Inspector and turn on `Wireframe` on the model's material — note that the Inspector
   renders continuously, so the idle render gate stays off while it is open.
-- Measurement lines and markers are drawn **through the model** so they stay visible. Marker size scales
-  with model size, so they are visible on both very small and very large models.
+- Measurement lines are drawn **through the model** so they stay visible, and the point markers sit in a
+  screen overlay at a **fixed size** — they neither swell as you zoom in nor shrink away on a distant pick,
+  whether the part is 5 mm or 5 m across.
 - Measurements accumulate in a list. Click an entry to select it, `✕` to remove one, `Clear all` to remove
   them all.
 - Changing the unit also refreshes the labels of measurements you already made.
@@ -75,8 +76,28 @@ goes to the viewer only while the 3D area has focus, so **click the model once a
 this keeps the viewer from swallowing keystrokes meant for the editor beside it. Number keys with a
 modifier (`Ctrl`, `Alt`, `Shift`, `Cmd`) are left alone so your own shortcuts keep working.
 
+![The same bracket from three viewpoints: front, right, and the opening view, reached with the number keys 2, 3 and 0](images/screen-03-views.png)
+
 At the cube's lower left, a small **X/Y/Z triad** points along the world axes — the same axes the dimensions above are
 labelled with. The letters are drawn on the lines, so the axes stay readable without relying on their colours.
+
+## Reading the shape
+
+Flat-shaded parts — STL files especially — often come out as one near-uniform tone, because the default
+studio lighting arrives from every direction at once and a diffuse surface lit evenly barely changes with
+the angle it faces. Three checkboxes under **Display** exist to fix that. All three are **off by default**
+and none of them changes the geometry, the dimensions, or your measurements — only how it is drawn.
+
+![The same STL bracket four times: with no aids it is one flat tone; Axis lighting tints each direction differently; Edges outlines every crease; Normal colors paints each face by the way it points](images/screen-04-shape-aids.png)
+
+| Toggle | What it does |
+|---|---|
+| **Axis lighting** | Lights the model from the three axes with contrasting colours, so faces pointing different ways come out in different hues. Not a realistic render — the point is that direction becomes visible. **STL only**: it works by adding diffuse light, and glTF/GLB materials are metallic by default, where diffuse light changes nothing and the model only gets darker. The checkbox is locked on those files. |
+| **Edges** | Draws a line along every crease, meaning an edge where the two faces meeting it differ in direction by more than about 18°. Disabled on very dense models, where finding those edges would freeze the viewer. |
+| **Normal colors** | Paints each face by the direction it points and ignores lighting entirely. The strongest of the three and the least realistic; it hides the model's own materials while it is on and restores them when you turn it off. |
+
+Because **Normal colors** paints faces directly, lighting has no effect while it is on — the **Axis
+lighting** checkbox is locked (but keeps its setting) until you turn it back off.
 
 ## Inspector
 
@@ -98,6 +119,9 @@ inside the Inspector says so (this also removed roughly 10 MB and several extern
 |---|---|---|
 | `modelLens.background` | `theme` | Viewer background mode. `theme` follows the VS Code editor background color; `light` (`#ffffff`) and `dark` (`#1f1f1f`) pin it regardless of the theme. Changing it from the viewer panel saves it here. |
 | `modelLens.grid` | `true` | Show the ground grid in the viewer. Toggling it from the viewer panel saves it here and applies to every open viewer immediately. |
+| `modelLens.axisLighting` | `false` | Light the model from three axes with contrasting colours so faces pointing different ways read differently. **STL only** — glTF/GLB materials are metallic by default, where added diffuse light has no effect. Toggling it from the viewer panel saves it here and applies to every open viewer immediately. |
+| `modelLens.edges` | `false` | Draw a line along every crease. Toggling it from the viewer panel saves it here and applies to every open viewer immediately. |
+| `modelLens.normalColors` | `false` | Paint each face by the direction it points, ignoring lighting. Toggling it from the viewer panel saves it here and applies to every open viewer immediately. |
 | `modelLens.inspectorOnStart` | `false` | Start with the Inspector open when a model is opened. |
 | `modelLens.unit` | `auto` | **Initial** unit for dimensions and measurements. `auto` means `m` for glTF/GLB and no label for STL. Changeable per file from the viewer panel, and that choice is remembered. |
 | `modelLens.decimals` | `3` | Number of decimal places displayed (0–10). |

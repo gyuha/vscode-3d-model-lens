@@ -117,6 +117,12 @@ createServer((req, res) => {
     pluginExtension,
     background: url.searchParams.get('background') ?? 'theme',
     grid: url.searchParams.get('grid') !== 'false',
+    // 표시 보조는 기본이 꺼짐이다. `?axisLighting=true` 처럼 켜진 채로 연 뷰어도 테스트한다.
+    shadingAids: {
+      axisLighting: url.searchParams.get('axisLighting') === 'true',
+      edges: url.searchParams.get('edges') === 'true',
+      normalColors: url.searchParams.get('normalColors') === 'true',
+    },
     unitSetting: url.searchParams.get('unit') ?? 'auto',
     decimals: Number(url.searchParams.get('decimals') ?? 3),
   });
@@ -143,5 +149,6 @@ createServer((req, res) => {
   console.log(`  테마:   dark · light`);
   console.log(`  단위:   ?unit=auto|mm|cm|m|in   자릿수: ?decimals=0..10`);
   console.log(`  배경:   ?background=theme|light|dark`);
-  console.log(`  그리드: ?grid=false (기본 true)`);
+  console.log(`  그리드: ?grid=false (기본 true)
+  표시 보조: ?axisLighting=true&edges=true&normalColors=true (기본 전부 false)`);
 });

@@ -4,6 +4,7 @@ import { readGridSetting } from './grid';
 import { pluginExtensionFor } from './formats';
 import type { HostToWebview, WebviewToHost } from './messages';
 import { computeLocalResourceRootPaths } from './resourceRoots';
+import { SHADING_AID_KEYS, readShadingAids } from './shading';
 import { UnitMemory } from './unitMemory';
 import { isUnitSetting, type UnitSetting } from './units';
 import { buildWebviewHtml } from './webviewHtml';
@@ -41,6 +42,16 @@ export class ModelLensViewerProvider implements vscode.CustomReadonlyEditorProvi
           const grid = readGridSetting(settings.get<unknown>('grid'));
           for (const session of this.sessions) {
             void this.send(session, { type: 'setGrid', grid });
+          }
+        }
+        // 표시 보조 셋은 배선이 동일하므로 순회한다 — 따로 쓰면 같은 블록이 세 벌이 된다.
+        const aids = readShadingAids((key) => settings.get<unknown>(key));
+        for (const aid of SHADING_AID_KEYS) {
+          if (!event.affectsConfiguration(`modelLens.${aid}`)) {
+            continue;
+          }
+          for (const session of this.sessions) {
+            void this.send(session, { type: 'setShadingAid', aid, on: aids[aid] });
           }
         }
       }),
@@ -109,6 +120,10 @@ export class ModelLensViewerProvider implements vscode.CustomReadonlyEditorProvi
           // 그리드도 배경과 같은 부류 — 사람 단위 표시 취향이므로 전역 설정에 저장한다.
           void config.update('grid', message.grid, vscode.ConfigurationTarget.Global);
           break;
+        case 'shadingAidChanged':
+          // 그리드·배경과 같은 부류 — 사람 단위 표시 취향이므로 전역 설정에 저장한다.
+          void config.update(message.aid, message.on, vscode.ConfigurationTarget.Global);
+          break;
         case 'backgroundChanged':
           // 배경은 파일이 아니라 사람 단위로 정해지는 값이므로 전역 설정에 저장한다.
           // 이 쓰기가 onDidChangeConfiguration 을 깨워 열려 있는 모든 뷰어로 전파된다.
@@ -139,6 +154,7 @@ export class ModelLensViewerProvider implements vscode.CustomReadonlyEditorProvi
       pluginExtension: pluginExtensionFor(document.uri.fsPath),
       background: readBackgroundMode(config),
       grid: readGridSetting(config.get<unknown>('grid')),
+      shadingAids: readShadingAids((key) => config.get<unknown>(key)),
       unitSetting: this.initialUnit(document.uri, config),
       decimals: config.get<number>('decimals', 3),
     });

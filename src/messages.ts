@@ -1,4 +1,5 @@
 import type { BackgroundMode } from './background';
+import type { ShadingAidKey } from './shading';
 import type { UnitSetting } from './units';
 
 /** 확장 호스트 ↔ 웹뷰 메시지. 양쪽이 같은 정의를 쓴다. */
@@ -11,7 +12,9 @@ export type HostToWebview =
   /** 설정이 바뀌었다 — 열려 있는 모든 뷰어에 전파된다. */
   | { type: 'setBackground'; background: BackgroundMode }
   /** 그리드 설정이 바뀌었다 — 열려 있는 모든 뷰어에 전파된다. */
-  | { type: 'setGrid'; grid: boolean };
+  | { type: 'setGrid'; grid: boolean }
+  /** 표시 보조 설정이 바뀌었다 — 열려 있는 모든 뷰어에 전파된다. */
+  | { type: 'setShadingAid'; aid: ShadingAidKey; on: boolean };
 
 export type WebviewToHost =
   | { type: 'ready' }
@@ -25,4 +28,6 @@ export type WebviewToHost =
   /** 사용자가 뷰어 패널 드롭다운에서 배경을 바꿨다 — 호스트가 전역 설정에 저장한다. */
   | { type: 'backgroundChanged'; background: BackgroundMode }
   /** 사용자가 뷰어 패널에서 그리드 표시를 토글했다 — 호스트가 전역 설정에 저장한다. */
-  | { type: 'gridChanged'; grid: boolean };
+  | { type: 'gridChanged'; grid: boolean }
+  /** 사용자가 뷰어 패널에서 표시 보조를 토글했다 — 호스트가 전역 설정에 저장한다. */
+  | { type: 'shadingAidChanged'; aid: ShadingAidKey; on: boolean };

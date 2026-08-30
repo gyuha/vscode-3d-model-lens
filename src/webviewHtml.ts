@@ -1,5 +1,6 @@
 import { BACKGROUND_MODES, type BackgroundMode } from './background';
 import type { SupportedExtension } from './formats';
+import type { ShadingAidState } from './shading';
 import { UNIT_SETTINGS, type UnitSetting } from './units';
 
 export interface WebviewHtmlParams {
@@ -21,6 +22,8 @@ export interface WebviewHtmlParams {
   background: BackgroundMode;
   /** 그리드 표시 여부. 전역 설정 `modelLens.grid` 가 진실의 출처다 */
   grid: boolean;
+  /** 표시 보조 셋의 초기 상태. 전역 설정이 진실의 출처이며 기본은 전부 꺼짐이다 */
+  shadingAids: ShadingAidState;
   /** 단위 초기값. `auto` 는 포맷에서 유추한다 */
   unitSetting: UnitSetting;
   /** 표시 소수점 자릿수 */
@@ -455,6 +458,15 @@ ${unitOptions}
       </button>
       <div class="section-body" id="display-body" hidden>
         <label><input type="checkbox" id="toggle-grid"${params.grid ? ' checked' : ''} /> Grid</label>
+        <label><input type="checkbox" id="toggle-axis-lighting"${
+          params.shadingAids.axisLighting ? ' checked' : ''
+        } /> Axis lighting</label>
+        <label><input type="checkbox" id="toggle-edges"${
+          params.shadingAids.edges ? ' checked' : ''
+        } /> Edges</label>
+        <label><input type="checkbox" id="toggle-normal-colors"${
+          params.shadingAids.normalColors ? ' checked' : ''
+        } /> Normal colors</label>
         <div id="background-row">
           <label for="background-select">Background</label>
           <select id="background-select">

@@ -13,6 +13,8 @@ const params = {
   pluginExtension: '.glb' as const,
   background: 'theme' as const,
   grid: true,
+  // 표시 보조는 전부 꺼짐이 기본이다 — 아무것도 건드리지 않은 화면을 그대로 두는 것이 결정이다.
+  shadingAids: { axisLighting: false, edges: false, normalColors: false },
   unitSetting: 'auto' as const,
   decimals: 3,
 };
