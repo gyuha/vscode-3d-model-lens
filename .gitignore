@@ -5,6 +5,7 @@ out/
 .vscode-test/
 playwright-report/
 test-results/
+.DS_Store
 
 # forge — 휘발 상태는 무시하고 영구 문서만 추적
 .forge/*
